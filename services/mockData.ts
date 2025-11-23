@@ -1,4 +1,4 @@
-import { Client, Appointment, Invoice, InventoryItem, Status } from '../types';
+import { Client, Appointment, Invoice, InventoryItem, Status, UserProfile } from '../types';
 
 // --- INITIAL DUMMY DATA ---
 const getRelativeDate = (daysOffset: number) => {
@@ -133,6 +133,7 @@ const INITIAL_INVENTORY: InventoryItem[] = [
 interface IDataService {
     getClients(): Promise<Client[]>;
     addClient(client: Client): Promise<Client>;
+    updateClient(client: Client): Promise<Client>;
     deleteClient(id: string): Promise<void>;
     
     getAppointments(): Promise<Appointment[]>;
@@ -151,6 +152,9 @@ interface IDataService {
     addInventoryItem(item: InventoryItem): Promise<InventoryItem>;
     updateInventoryItem(item: InventoryItem): Promise<InventoryItem>;
     deleteInventoryItem(id: string): Promise<void>;
+
+    getSettings(): Promise<UserProfile | null>;
+    saveSettings(settings: UserProfile): Promise<void>;
 }
 
 // --- MOCK SERVICE (Fallback) ---
@@ -161,12 +165,18 @@ class MockService implements IDataService {
     private appointments = [...INITIAL_APPOINTMENTS];
     private invoices = [...INITIAL_INVOICES];
     private inventory = [...INITIAL_INVENTORY];
+    private settings: UserProfile | null = null;
 
     async getClients() { await delay(300); return [...this.clients]; }
     async addClient(c: Client) { 
         await delay(300); 
         const nc = { ...c, id: c.id || Math.random().toString(36).substr(2, 9) }; 
         this.clients.push(nc); return nc; 
+    }
+    async updateClient(c: Client) {
+        await delay(300);
+        this.clients = this.clients.map(x => x.id === c.id ? c : x);
+        return c;
     }
     async deleteClient(id: string) { await delay(300); this.clients = this.clients.filter(c => c.id !== id); }
 
@@ -220,6 +230,22 @@ class MockService implements IDataService {
         return i; 
     }
     async deleteInventoryItem(id: string) { await delay(300); this.inventory = this.inventory.filter(x => x.id !== id); }
+
+    async getSettings() {
+        await delay(300);
+        // Try to load from localStorage if in mock mode but user wants persistence simulation
+        if (!this.settings) {
+             const stored = localStorage.getItem('cleanswift_user_profile');
+             if (stored) return JSON.parse(stored);
+        }
+        return this.settings;
+    }
+
+    async saveSettings(s: UserProfile) {
+        await delay(300);
+        this.settings = s;
+        localStorage.setItem('cleanswift_user_profile', JSON.stringify(s));
+    }
 }
 
 // --- GOOGLE SHEETS SERVICE ---
@@ -229,7 +255,8 @@ const SHEETS = {
     CLIENTS: "Clients",
     APPOINTMENTS: "Appointments",
     INVOICES: "Invoices",
-    INVENTORY: "Inventory"
+    INVENTORY: "Inventory",
+    SETTINGS: "Settings"
 };
 
 class GoogleSheetsService implements IDataService {
@@ -243,9 +270,12 @@ class GoogleSheetsService implements IDataService {
     private async fetch(url: string, options: RequestInit = {}) {
         const res = await fetch(url, {
             ...options,
+            cache: 'no-store',
             headers: {
                 'Authorization': `Bearer ${this.token}`,
                 'Content-Type': 'application/json',
+                'Pragma': 'no-cache',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
                 ...options.headers
             }
         });
@@ -263,6 +293,27 @@ class GoogleSheetsService implements IDataService {
         
         if (searchRes.files && searchRes.files.length > 0) {
             this.spreadsheetId = searchRes.files[0].id;
+            
+            // Check if "Settings" sheet exists (for legacy users)
+            const metaRes = await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}`);
+            const sheetTitles = (metaRes.sheets || []).map((s: any) => s.properties.title);
+            
+            if (!sheetTitles.includes(SHEETS.SETTINGS)) {
+                // Add Settings Sheet
+                await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}:batchUpdate`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        requests: [
+                            { addSheet: { properties: { title: SHEETS.SETTINGS, gridProperties: { frozenRowCount: 1 } } } }
+                        ]
+                    })
+                });
+                
+                // Seed Header
+                const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "Avatar (Base64)", "JobTypes (JSON)"];
+                await this.writeSheet(SHEETS.SETTINGS, [settingsHeader]);
+            }
+
         } else {
             await this.createAndSeedSpreadsheet();
         }
@@ -278,7 +329,8 @@ class GoogleSheetsService implements IDataService {
                     { properties: { title: SHEETS.CLIENTS, gridProperties: { frozenRowCount: 1 } } },
                     { properties: { title: SHEETS.APPOINTMENTS, gridProperties: { frozenRowCount: 1 } } },
                     { properties: { title: SHEETS.INVOICES, gridProperties: { frozenRowCount: 1 } } },
-                    { properties: { title: SHEETS.INVENTORY, gridProperties: { frozenRowCount: 1 } } }
+                    { properties: { title: SHEETS.INVENTORY, gridProperties: { frozenRowCount: 1 } } },
+                    { properties: { title: SHEETS.SETTINGS, gridProperties: { frozenRowCount: 1 } } }
                 ]
             })
         });
@@ -315,11 +367,13 @@ class GoogleSheetsService implements IDataService {
         const apptHeader = ["ID", "ClientID", "Client Name", "Date", "Time", "Service", "Status", "Address", "Rate", "Hours", "Notes"];
         const invHeader = ["ID", "ClientID", "ApptID", "Client Name", "Issue Date", "Due Date", "Status", "Amount", "Notes", "Items (JSON)"];
         const invenHeader = ["ID", "Item Name", "Quantity", "Unit", "Min Threshold", "Status", "Supplier", "Cost", "Notes"];
+        const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "Avatar (Base64)", "JobTypes (JSON)"];
 
         await this.writeSheet(SHEETS.CLIENTS, [clientHeader, ...INITIAL_CLIENTS.map(this.serializeClient)]);
         await this.writeSheet(SHEETS.APPOINTMENTS, [apptHeader, ...INITIAL_APPOINTMENTS.map(this.serializeAppointment)]);
         await this.writeSheet(SHEETS.INVOICES, [invHeader, ...INITIAL_INVOICES.map(this.serializeInvoice)]);
         await this.writeSheet(SHEETS.INVENTORY, [invenHeader, ...INITIAL_INVENTORY.map(this.serializeInventory)]);
+        await this.writeSheet(SHEETS.SETTINGS, [settingsHeader]);
     }
 
     // --- Serialization Helpers ---
@@ -359,11 +413,62 @@ class GoogleSheetsService implements IDataService {
         status: row[5] as Status, supplier: row[6], cost: Number(row[7]), notes: row[8]
     });
 
+    private serializeSettings = (s: UserProfile) => {
+        const jobTypesStr = JSON.stringify(s.jobTypes);
+        const avatar = s.avatar || "";
+        const chunkSize = 40000; // Safe limit below 50k
+        const avatarChunks = [];
+        for (let i = 0; i < avatar.length; i += chunkSize) {
+            avatarChunks.push(avatar.slice(i, i + chunkSize));
+        }
+        
+        return [
+            s.companyName, 
+            s.companyAddress, 
+            s.showLogoOnInvoice ? "TRUE" : "FALSE", 
+            jobTypesStr, 
+            ...avatarChunks
+        ];
+    };
+    
+    private deserializeSettings = (row: any[]): UserProfile => {
+        let jobTypes = [];
+        let avatar = "";
+        
+        // Heuristic to support both old and new schema during transition
+        // New Schema: [Name, Addr, Logo, JobTypes, AvatarChunk1, AvatarChunk2...]
+        // Old Schema: [Name, Addr, Logo, Avatar, JobTypes]
+        
+        const col3 = row[3] || "";
+        if (col3.trim().startsWith('[')) {
+            // It's likely JSON, so it's the New Schema
+            try { jobTypes = JSON.parse(col3); } catch(e) {}
+            avatar = row.slice(4).join('');
+        } else {
+            // Fallback / Old Schema
+            avatar = col3;
+            if (row[4]) {
+                try { jobTypes = JSON.parse(row[4]); } catch(e) {}
+            }
+        }
+
+        return {
+            companyName: row[0],
+            companyAddress: row[1],
+            showLogoOnInvoice: row[2] === "TRUE",
+            avatar: avatar,
+            jobTypes: jobTypes
+        };
+    };
+
     // --- Core CRUD ---
 
     private async readSheet<T>(sheetName: string, deserializer: (row: any[]) => T): Promise<T[]> {
-        const res = await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A2:Z`); // Start A2 to skip header
+        const res = await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A2:ZZ`); // Extended range to ZZ to catch all chunks
         const rows = res.values || [];
+        // Filter out empty rows if any, though deserialize usually handles it. 
+        // Note: For settings, we might get 1 row without ID.
+        if (sheetName === SHEETS.SETTINGS) return rows.map(deserializer);
         return rows.map(deserializer).filter((item: any) => item.id);
     }
 
@@ -378,6 +483,12 @@ class GoogleSheetsService implements IDataService {
         await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A1:append?valueInputOption=USER_ENTERED`, {
             method: 'POST',
             body: JSON.stringify({ values: [row] })
+        });
+    }
+
+    private async clearSheet(sheetName: string) {
+        await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A:ZZ:clear`, {
+            method: 'POST'
         });
     }
 
@@ -397,6 +508,9 @@ class GoogleSheetsService implements IDataService {
         const headerRes = await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A1:Z1`);
         const header = headerRes.values ? headerRes.values[0] : [];
         
+        // Clear the sheet to remove leftovers (safest way to handle deletions)
+        await this.clearSheet(sheetName);
+
         // Write back Header + Data
         await this.writeSheet(sheetName, [header, ...rows]);
         return newItems;
@@ -409,6 +523,10 @@ class GoogleSheetsService implements IDataService {
         const nc = { ...c, id: c.id || Math.random().toString(36).substr(2, 9) };
         await this.appendRow(SHEETS.CLIENTS, this.serializeClient(nc));
         return nc;
+    }
+    async updateClient(c: Client) {
+        await this.updateSheetData(SHEETS.CLIENTS, this.deserializeClient, this.serializeClient, items => items.map(i => i.id === c.id ? c : i));
+        return c;
     }
     async deleteClient(id: string) {
         await this.updateSheetData(SHEETS.CLIENTS, this.deserializeClient, this.serializeClient, items => items.filter(i => i.id !== id));
@@ -468,6 +586,19 @@ class GoogleSheetsService implements IDataService {
     async deleteInventoryItem(id: string) {
         await this.updateSheetData(SHEETS.INVENTORY, this.deserializeInventory, this.serializeInventory, items => items.filter(x => x.id !== id));
     }
+
+    async getSettings() {
+        const rows = await this.readSheet(SHEETS.SETTINGS, this.deserializeSettings);
+        return rows.length > 0 ? rows[0] : null;
+    }
+
+    async saveSettings(s: UserProfile) {
+        // We overwrite the entire sheet (preserving header)
+        // Header matching new schema:
+        const header = ["CompanyName", "CompanyAddress", "ShowLogo", "JobTypes (JSON)", "Avatar (Base64...Chunks)"];
+        
+        await this.writeSheet(SHEETS.SETTINGS, [header, this.serializeSettings(s)]);
+    }
 }
 
 // --- PROXY SERVICE (THE EXPORT) ---
@@ -492,6 +623,7 @@ class DBProxy implements IDataService {
     // Proxies
     getClients() { return this.service.getClients(); }
     addClient(c: Client) { return this.service.addClient(c); }
+    updateClient(c: Client) { return this.service.updateClient(c); }
     deleteClient(id: string) { return this.service.deleteClient(id); }
     
     getAppointments() { return this.service.getAppointments(); }
@@ -510,6 +642,9 @@ class DBProxy implements IDataService {
     addInventoryItem(i: InventoryItem) { return this.service.addInventoryItem(i); }
     updateInventoryItem(i: InventoryItem) { return this.service.updateInventoryItem(i); }
     deleteInventoryItem(id: string) { return this.service.deleteInventoryItem(id); }
+    
+    getSettings() { return this.service.getSettings(); }
+    saveSettings(s: UserProfile) { return this.service.saveSettings(s); }
 }
 
 export const db = new DBProxy();

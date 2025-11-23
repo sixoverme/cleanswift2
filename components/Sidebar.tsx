@@ -59,8 +59,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, to
         </nav>
 
         <div className="absolute bottom-0 w-full border-t border-gray-200 p-4">
-             <button className="w-full flex items-center px-4 py-3 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100">
-                 <Settings className="mr-3 h-5 w-5 text-gray-400" />
+             <button 
+               onClick={() => {
+                 onChangeView('SETTINGS');
+                 if (window.innerWidth < 1024) toggleSidebar();
+               }}
+               className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                 currentView === 'SETTINGS'
+                   ? 'bg-primary-50 text-primary-700'
+                   : 'text-gray-600 hover:bg-gray-100'
+               }`}
+             >
+                 <Settings className={`mr-3 h-5 w-5 ${currentView === 'SETTINGS' ? 'text-primary-600' : 'text-gray-400'}`} />
                  Settings
              </button>
         </div>

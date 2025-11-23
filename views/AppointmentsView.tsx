@@ -17,6 +17,7 @@ const AppointmentsView: React.FC = () => {
 
   // State for Modal Form
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const emptyForm: Partial<Appointment> = {
       clientId: '',
       clientName: '',
@@ -31,12 +32,42 @@ const AppointmentsView: React.FC = () => {
   };
   const [formData, setFormData] = useState<Partial<Appointment>>(emptyForm);
 
+  // User Settings
+  const [jobTypes, setJobTypes] = useState<{id: string, name: string, defaultRate: number}[]>([]);
+
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   useEffect(() => {
     fetchData();
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+      try {
+          let profile = await db.getSettings();
+          
+          // Fallback to local storage if DB returns null (e.g. offline or not set yet)
+          if (!profile) {
+               const savedProfile = localStorage.getItem('cleanswift_user_profile');
+               if (savedProfile) profile = JSON.parse(savedProfile);
+          }
+
+          if (profile && profile.jobTypes && Array.isArray(profile.jobTypes)) {
+              setJobTypes(profile.jobTypes);
+          } else {
+              // Default Fallback
+              setJobTypes([
+                { id: 'def1', name: 'Standard Clean', defaultRate: 45 },
+                { id: 'def2', name: 'Deep Clean', defaultRate: 60 },
+                { id: 'def3', name: 'Move-In/Out', defaultRate: 55 },
+                { id: 'def4', name: 'Organization', defaultRate: 50 }
+            ]);
+          }
+      } catch (e) {
+          console.error("Failed to load settings", e);
+      }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -67,30 +98,39 @@ const AppointmentsView: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     
-    const apptToSave: Appointment = {
-        id: formData.id || '', // ID is generated in service if empty
-        clientId: formData.clientId || '',
-        clientName: formData.clientName || 'Unknown',
-        date: formData.date || '',
-        time: formData.time || '',
-        serviceType: formData.serviceType || 'Standard Clean',
-        status: formData.status || Status.Pending,
-        address: formData.address || '',
-        rate: Number(formData.rate) || 0,
-        estimatedHours: Number(formData.estimatedHours) || 0,
-        notes: formData.notes || ''
-    };
+    try {
+        const apptToSave: Appointment = {
+            id: formData.id || '', // ID is generated in service if empty
+            clientId: formData.clientId || '',
+            clientName: formData.clientName || 'Unknown',
+            date: formData.date || '',
+            time: formData.time || '',
+            serviceType: formData.serviceType || 'Standard Clean',
+            status: formData.status || Status.Pending,
+            address: formData.address || '',
+            rate: Number(formData.rate) || 0,
+            estimatedHours: Number(formData.estimatedHours) || 0,
+            notes: formData.notes || ''
+        };
 
-    if (apptToSave.id) {
-        await db.updateAppointment(apptToSave);
-    } else {
-        await db.addAppointment(apptToSave);
+        if (apptToSave.id) {
+            await db.updateAppointment(apptToSave);
+        } else {
+            await db.addAppointment(apptToSave);
+        }
+        
+        setIsModalOpen(false);
+        setSelectedAppt(null);
+        fetchData();
+    } catch (error) {
+        console.error("Error saving appointment:", error);
+        alert("Failed to save appointment.");
+    } finally {
+        setSubmitting(false);
     }
-    
-    setIsModalOpen(false);
-    setSelectedAppt(null);
-    fetchData();
   };
 
   const handleDelete = async (id: string) => {
@@ -107,7 +147,12 @@ const AppointmentsView: React.FC = () => {
   };
 
   const handleNew = () => {
-      setFormData(emptyForm);
+      const defaultService = jobTypes.length > 0 ? jobTypes[0] : { name: 'Standard Clean', defaultRate: 0 };
+      setFormData({
+          ...emptyForm,
+          serviceType: defaultService.name,
+          rate: defaultService.defaultRate
+      });
       setIsModalOpen(true);
   };
 
@@ -121,6 +166,12 @@ const AppointmentsView: React.FC = () => {
     [Status.Overdue]: 'bg-red-100 text-red-800',
     [Status.LowStock]: 'bg-red-100 text-red-800',
     [Status.InStock]: 'bg-green-100 text-green-800',
+  };
+
+  const formatDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric'});
   };
 
   // --- RENDER HELPERS ---
@@ -214,7 +265,7 @@ const AppointmentsView: React.FC = () => {
                   <div className="space-y-2 text-sm text-gray-600 my-4">
                       <div className="flex items-center gap-2">
                           <Calendar size={16} className="text-primary-500" />
-                          <span className="font-medium">{new Date(apt.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric'})}</span>
+                          <span className="font-medium">{formatDate(apt.date)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                           <Clock size={16} className="text-primary-500" />
@@ -254,7 +305,7 @@ const AppointmentsView: React.FC = () => {
     const client = clients.find(c => c.id === selectedAppt.clientId);
 
     return (
-      <div className="p-6">
+      <>
         {/* Header / Nav - Matching ClientsView */}
         <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
@@ -385,14 +436,14 @@ const AppointmentsView: React.FC = () => {
                 </div>
             </div>
         </div>
-      </div>
+      </>
     );
   };
 
-  if (selectedAppt) return renderDetailView();
-
   return (
     <div className="p-6">
+      {selectedAppt ? renderDetailView() : (
+      <>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-2xl font-bold text-gray-800">Appointments</h2>
         
@@ -421,6 +472,8 @@ const AppointmentsView: React.FC = () => {
       </div>
 
       {viewMode === 'CARDS' ? renderCardView() : renderCalendarView()}
+      </>
+      )}
 
       {/* ADD/EDIT MODAL */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={formData.id ? "Edit Appointment" : "New Appointment"}>
@@ -476,12 +529,20 @@ const AppointmentsView: React.FC = () => {
                     <select 
                         className="block w-full rounded-lg border border-gray-300 p-2"
                         value={formData.serviceType} 
-                        onChange={e => setFormData({...formData, serviceType: e.target.value})}
+                        onChange={e => {
+                            const newService = e.target.value;
+                            const matchedJob = jobTypes.find(j => j.name === newService);
+                            setFormData({
+                                ...formData, 
+                                serviceType: newService,
+                                rate: matchedJob ? matchedJob.defaultRate : formData.rate
+                            });
+                        }}
                     >
-                        <option value="Standard Clean">Standard Clean</option>
-                        <option value="Deep Clean">Deep Clean</option>
-                        <option value="Move-In/Out">Move-In/Out</option>
-                        <option value="Organization">Organization</option>
+                        <option value="">Select Service...</option>
+                        {jobTypes.map(job => (
+                            <option key={job.id} value={job.name}>{job.name}</option>
+                        ))}
                     </select>
                 </div>
                 <div>
@@ -556,8 +617,10 @@ const AppointmentsView: React.FC = () => {
             </div>
 
             <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700">Save Appointment</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200" disabled={submitting}>Cancel</button>
+                <button type="submit" disabled={submitting} className={`px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    {submitting ? 'Saving...' : 'Save Appointment'}
+                </button>
             </div>
         </form>
       </Modal>

@@ -1,18 +1,124 @@
-import React, { useEffect, useState } from 'react';
-import { Invoice, Client, Status, InvoiceItem } from '../types';
+import React, { useEffect, useState, useRef } from 'react';
+import { Invoice, Client, Status, InvoiceItem, UserProfile } from '../types';
 import { db } from '../services/mockData';
 import Modal from '../components/Modal';
-import { Trash2, Download, Check, Plus, FileText, Calendar, DollarSign, User, ArrowLeft, Edit, Mail } from 'lucide-react';
+import { Trash2, Download, Check, Plus, FileText, Calendar, DollarSign, User, ArrowLeft, Edit, Mail, ChevronDown } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+interface InvoiceItemRowProps {
+  item: InvoiceItem;
+  jobTypes: {id: string, name: string, defaultRate: number}[];
+  onUpdate: (id: string, field: keyof InvoiceItem, value: any) => void;
+  onRemove: (id: string) => void;
+}
+
+const InvoiceItemRow: React.FC<InvoiceItemRowProps> = ({ item, jobTypes, onUpdate, onRemove }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (job: {name: string, defaultRate: number}) => {
+    onUpdate(item.id, 'description', job.name);
+    onUpdate(item.id, 'unitPrice', job.defaultRate);
+    setShowDropdown(false);
+  };
+
+  return (
+    <div className="flex items-start gap-2 bg-gray-50 p-2 rounded border border-gray-200 relative group">
+        <div className="flex-1 space-y-2">
+            <div className="relative" ref={wrapperRef}>
+                <input 
+                    type="text"
+                    className="w-full text-sm border rounded p-1 pr-8 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    placeholder="Description"
+                    value={item.description}
+                    onChange={(e) => onUpdate(item.id, 'description', e.target.value)}
+                    onFocus={() => setShowDropdown(true)}
+                />
+                <button 
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                    tabIndex={-1}
+                >
+                    <ChevronDown size={14} />
+                </button>
+                
+                {showDropdown && (
+                    <div className="absolute z-20 w-full bg-white border border-gray-200 rounded shadow-lg mt-1 max-h-48 overflow-y-auto">
+                        {jobTypes.map(job => (
+                            <button
+                                key={job.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex justify-between items-center text-gray-700 hover:text-primary-700 transition-colors"
+                                onClick={() => handleSelect(job)}
+                            >
+                                <span className="font-medium">{job.name}</span>
+                                <span className="text-gray-400 text-xs">${job.defaultRate}/hr</span>
+                            </button>
+                        ))}
+                        {jobTypes.length === 0 && (
+                             <div className="px-3 py-2 text-sm text-gray-400 italic">No services configured in settings.</div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <div className="flex gap-2">
+                <div className="w-1/3">
+                    <label className="text-xs text-gray-500 block">Qty</label>
+                    <input 
+                        type="number" 
+                        min="1" 
+                        className="w-full text-sm border rounded p-1 focus:ring-2 focus:ring-primary-500 outline-none" 
+                        value={item.quantity} 
+                        onChange={e => onUpdate(item.id, 'quantity', parseFloat(e.target.value))} 
+                    />
+                </div>
+                <div className="w-1/3">
+                    <label className="text-xs text-gray-500 block">Price</label>
+                    <input 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        className="w-full text-sm border rounded p-1 focus:ring-2 focus:ring-primary-500 outline-none" 
+                        value={item.unitPrice} 
+                        onChange={e => onUpdate(item.id, 'unitPrice', parseFloat(e.target.value))} 
+                    />
+                </div>
+                <div className="w-1/3">
+                        <label className="text-xs text-gray-500 block">Total</label>
+                        <div className="text-sm font-medium py-1 text-right px-1">${(item.quantity * item.unitPrice).toFixed(2)}</div>
+                </div>
+            </div>
+        </div>
+        <button type="button" onClick={() => onRemove(item.id)} className="text-gray-300 hover:text-red-500 p-1 mt-1">
+            <Trash2 size={16} />
+        </button>
+    </div>
+  );
+};
 
 const InvoicesView: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [jobTypes, setJobTypes] = useState<{id: string, name: string, defaultRate: number}[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Form State
   const emptyInvoice: Partial<Invoice> = {
@@ -29,7 +135,28 @@ const InvoicesView: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+        let profile = await db.getSettings();
+        
+        if (!profile) {
+            const savedProfile = localStorage.getItem('cleanswift_user_profile');
+            if (savedProfile) profile = JSON.parse(savedProfile);
+        }
+
+        if (profile) {
+            setUserProfile(profile);
+            if (profile.jobTypes && Array.isArray(profile.jobTypes)) {
+                setJobTypes(profile.jobTypes);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load settings", e);
+    }
+  };
 
   const fetchData = async () => {
     const [invData, clientData] = await Promise.all([
@@ -42,31 +169,40 @@ const InvoicesView: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Calculate total just in case
-    const totalAmount = (formData.items || []).reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    if (submitting) return;
+    setSubmitting(true);
 
-    const invoiceToSave: Invoice = {
-        id: formData.id || '',
-        clientId: formData.clientId || '',
-        clientName: formData.clientName || 'Unknown',
-        date: formData.date || '',
-        dueDate: formData.dueDate || '',
-        status: formData.status || Status.Unpaid,
-        items: formData.items || [],
-        notes: formData.notes || '',
-        amount: totalAmount
-    };
+    try {
+        // Calculate total just in case
+        const totalAmount = (formData.items || []).reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
 
-    if (invoiceToSave.id) {
-        await db.updateInvoice(invoiceToSave);
-    } else {
-        await db.addInvoice(invoiceToSave);
+        const invoiceToSave: Invoice = {
+            id: formData.id || '',
+            clientId: formData.clientId || '',
+            clientName: formData.clientName || 'Unknown',
+            date: formData.date || '',
+            dueDate: formData.dueDate || '',
+            status: formData.status || Status.Unpaid,
+            items: formData.items || [],
+            notes: formData.notes || '',
+            amount: totalAmount
+        };
+
+        if (invoiceToSave.id) {
+            await db.updateInvoice(invoiceToSave);
+        } else {
+            await db.addInvoice(invoiceToSave);
+        }
+
+        setIsModalOpen(false);
+        if (selectedInvoice) setSelectedInvoice(invoiceToSave); // Update detail view if open
+        fetchData();
+    } catch (error) {
+        console.error("Error saving invoice:", error);
+        alert("Failed to save invoice.");
+    } finally {
+        setSubmitting(false);
     }
-
-    setIsModalOpen(false);
-    if (selectedInvoice) setSelectedInvoice(invoiceToSave); // Update detail view if open
-    fetchData();
   };
 
   const handleDelete = async (id: string) => {
@@ -83,9 +219,12 @@ const InvoicesView: React.FC = () => {
   };
 
   const handleNew = () => {
+      const defaultDesc = jobTypes.length > 0 ? jobTypes[0].name : 'Cleaning Services';
+      const defaultPrice = jobTypes.length > 0 ? jobTypes[0].defaultRate : 0;
+
       setFormData({
           ...emptyInvoice,
-          items: [{ id: generateId(), description: 'Cleaning Services', quantity: 1, unitPrice: 0 }]
+          items: [{ id: generateId(), description: defaultDesc, quantity: 1, unitPrice: defaultPrice }]
       });
       setIsModalOpen(true);
   };
@@ -105,31 +244,67 @@ const InvoicesView: React.FC = () => {
     const doc = new jsPDF();
     const client = clients.find(c => c.id === selectedInvoice.clientId);
 
-    // Brand / Header
-    doc.setFontSize(20);
-    doc.setTextColor(14, 165, 233); // Primary color (Tailwind primary-500 matches roughly)
-    doc.text("CleanSwift", 14, 22);
+    // --- HEADER SECTION ---
+    let yPos = 20;
     
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text("Professional House Cleaning", 14, 28);
+    // Logo Logic
+    if (userProfile?.showLogoOnInvoice && userProfile.avatar) {
+        try {
+            // Add image at top left. 
+            // Syntax: addImage(imageData, format, x, y, width, height)
+            doc.addImage(userProfile.avatar, 'JPEG', 14, 15, 30, 30); 
+            // If logo is present, we push the company text to the right or below. 
+            // Let's push text to the right of the logo.
+            doc.setFontSize(20);
+            doc.setTextColor(14, 165, 233);
+            doc.text(userProfile.companyName || "CleanSwift", 50, 25);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(userProfile.companyAddress || "Professional House Cleaning", 50, 31);
 
-    // Invoice Label
+            yPos = 50; // Push down start of next section
+        } catch (e) {
+            console.error("Error adding logo to PDF", e);
+            // Fallback to text only if image fails
+            doc.setFontSize(20);
+            doc.setTextColor(14, 165, 233);
+            doc.text(userProfile?.companyName || "CleanSwift", 14, 22);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(userProfile?.companyAddress || "Professional House Cleaning", 14, 28);
+            yPos = 45;
+        }
+    } else {
+        // No Logo - Standard Layout
+        doc.setFontSize(20);
+        doc.setTextColor(14, 165, 233);
+        doc.text(userProfile?.companyName || "CleanSwift", 14, 22);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(userProfile?.companyAddress || "Professional House Cleaning", 14, 28);
+        yPos = 45;
+    }
+
+    // Invoice Label (Top Right)
     doc.setFontSize(24);
     doc.setTextColor(0);
     doc.text("INVOICE", 140, 22);
 
-    // Invoice Details
     doc.setFontSize(10);
     doc.text(`Invoice #: ${selectedInvoice.id}`, 140, 30);
     doc.text(`Date: ${selectedInvoice.date}`, 140, 35);
     doc.text(`Due Date: ${selectedInvoice.dueDate}`, 140, 40);
     doc.text(`Status: ${selectedInvoice.status}`, 140, 45);
 
-    // Bill To
-    doc.text("Bill To:", 14, 45);
+    // Bill To Section
+    doc.text("Bill To:", 14, yPos);
+    yPos += 7;
     doc.setFontSize(12);
-    doc.text(selectedInvoice.clientName, 14, 52);
+    doc.text(selectedInvoice.clientName, 14, yPos);
+    yPos += 5;
     
     if (client) {
         doc.setFontSize(10);
@@ -137,7 +312,6 @@ const InvoicesView: React.FC = () => {
         const primaryContact = client.contacts.find(c => c.isPrimary);
         const primaryLoc = client.locations.find(l => l.isPrimary);
         
-        let yPos = 57;
         if (primaryLoc) {
              doc.text(primaryLoc.address, 14, yPos);
              yPos += 5;
@@ -167,7 +341,7 @@ const InvoicesView: React.FC = () => {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 80,
+      startY: yPos + 15, // Dynamic start based on header height
       theme: 'striped',
       headStyles: { fillColor: [14, 165, 233] },
       styles: { fontSize: 10 },
@@ -488,35 +662,16 @@ const InvoicesView: React.FC = () => {
                             + Add Item
                         </button>
                     </div>
+                    
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {(formData.items || []).map(item => (
-                            <div key={item.id} className="flex items-start gap-2 bg-gray-50 p-2 rounded border border-gray-200 relative group">
-                                <div className="flex-1 space-y-2">
-                                    <input 
-                                        placeholder="Description" 
-                                        className="w-full text-sm border rounded p-1" 
-                                        value={item.description} 
-                                        onChange={e => updateItem(item.id, 'description', e.target.value)} 
-                                    />
-                                    <div className="flex gap-2">
-                                        <div className="w-1/3">
-                                            <label className="text-xs text-gray-500 block">Qty</label>
-                                            <input type="number" min="1" className="w-full text-sm border rounded p-1" value={item.quantity} onChange={e => updateItem(item.id, 'quantity', parseFloat(e.target.value))} />
-                                        </div>
-                                        <div className="w-1/3">
-                                            <label className="text-xs text-gray-500 block">Price</label>
-                                            <input type="number" min="0" step="0.01" className="w-full text-sm border rounded p-1" value={item.unitPrice} onChange={e => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} />
-                                        </div>
-                                        <div className="w-1/3">
-                                             <label className="text-xs text-gray-500 block">Total</label>
-                                             <div className="text-sm font-medium py-1 text-right px-1">${(item.quantity * item.unitPrice).toFixed(2)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button type="button" onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-500 p-1">
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
+                            <InvoiceItemRow 
+                                key={item.id}
+                                item={item}
+                                jobTypes={jobTypes}
+                                onUpdate={updateItem}
+                                onRemove={removeItem}
+                            />
                         ))}
                     </div>
                     <div className="flex justify-end mt-2 pt-2 border-t border-gray-200">
@@ -537,8 +692,10 @@ const InvoicesView: React.FC = () => {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
-                    <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700">Save Invoice</button>
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200" disabled={submitting}>Cancel</button>
+                    <button type="submit" disabled={submitting} className={`px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        {submitting ? 'Saving...' : 'Save Invoice'}
+                    </button>
                 </div>
              </form>
         </Modal>

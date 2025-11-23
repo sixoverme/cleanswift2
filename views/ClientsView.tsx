@@ -9,6 +9,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 const ClientsView: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   
@@ -39,11 +40,16 @@ const ClientsView: React.FC = () => {
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if(window.confirm("Are you sure you want to delete this client?")) {
-      await db.deleteClient(id);
-      if (selectedClient && selectedClient.id === id) {
-        setSelectedClient(null);
+      try {
+        await db.deleteClient(id);
+        if (selectedClient && selectedClient.id === id) {
+          setSelectedClient(null);
+        }
+        await fetchClients();
+      } catch (error) {
+        console.error("Delete failed:", error);
+        alert("Failed to delete client. Please try again.");
       }
-      fetchClients();
     }
   };
 
@@ -60,19 +66,30 @@ const ClientsView: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     
-    // Mock Service Update Logic
-    if (formData.id && clients.some(c => c.id === formData.id)) {
-        await db.deleteClient(formData.id);
-    }
-    const savedClient = await db.addClient(formData);
-    
-    await fetchClients();
-    setIsModalOpen(false);
+    try {
+      let savedClient: Client;
+      // Service Update Logic
+      if (formData.id && clients.some(c => c.id === formData.id)) {
+          savedClient = await db.updateClient(formData);
+      } else {
+          savedClient = await db.addClient(formData);
+      }
+      
+      await fetchClients();
+      setIsModalOpen(false);
 
-    // If editing the currently viewed client, update the view with new data
-    if (selectedClient && (selectedClient.id === formData.id || !formData.id)) {
-        setSelectedClient(savedClient);
+      // If editing the currently viewed client, update the view with new data
+      if (selectedClient && (selectedClient.id === savedClient.id)) {
+          setSelectedClient(savedClient);
+      }
+    } catch (err) {
+      console.error("Failed to save client", err);
+      alert("Error saving client. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -210,8 +227,10 @@ const ClientsView: React.FC = () => {
         </div>
 
         <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200">
-        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700">Save Client</button>
+        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200" disabled={submitting}>Cancel</button>
+        <button type="submit" disabled={submitting} className={`px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            {submitting ? 'Saving...' : 'Save Client'}
+        </button>
         </div>
     </form>
   );

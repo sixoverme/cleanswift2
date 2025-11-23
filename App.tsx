@@ -5,6 +5,7 @@ import ClientsView from './views/ClientsView';
 import AppointmentsView from './views/AppointmentsView';
 import InvoicesView from './views/InvoicesView';
 import InventoryView from './views/InventoryView';
+import SettingsView from './views/SettingsView';
 import WelcomeScreen from './components/WelcomeScreen';
 import { db } from './services/mockData';
 import { ViewState } from './types';
@@ -41,6 +42,7 @@ const App: React.FC = () => {
       case 'APPOINTMENTS': return <AppointmentsView />;
       case 'INVOICES': return <InvoicesView />;
       case 'INVENTORY': return <InventoryView />;
+      case 'SETTINGS': return <SettingsView />;
       default: return <DashboardView />;
     }
   };

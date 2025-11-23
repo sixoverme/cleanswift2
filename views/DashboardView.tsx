@@ -24,7 +24,9 @@ const DashboardView: React.FC = () => {
 
       // Date Helpers
       const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
+      // Fix: Use local time for todayStr instead of UTC
+      const offset = now.getTimezoneOffset() * 60000;
+      const todayStr = new Date(now.getTime() - offset).toISOString().split('T')[0];
       
       const startOfWeek = new Date(now);
       startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
@@ -48,7 +50,8 @@ const DashboardView: React.FC = () => {
       let potentialWeek = 0;
 
       appointments.forEach(apt => {
-        const aptDate = new Date(apt.date);
+        // Fix: Parse appointment date as local time
+        const aptDate = new Date(apt.date + 'T00:00:00');
         const revenue = apt.rate * apt.estimatedHours;
 
         // Is in current week?

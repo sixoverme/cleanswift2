@@ -98,4 +98,18 @@ export interface InventoryItem {
   notes: string;
 }
 
-export type ViewState = 'DASHBOARD' | 'CLIENTS' | 'APPOINTMENTS' | 'INVOICES' | 'INVENTORY';
+export interface JobType {
+  id: string;
+  name: string;
+  defaultRate: number;
+}
+
+export interface UserProfile {
+  companyName: string;
+  companyAddress: string;
+  avatar?: string; // Base64 or URL
+  showLogoOnInvoice?: boolean;
+  jobTypes: JobType[];
+}
+
+export type ViewState = 'DASHBOARD' | 'CLIENTS' | 'APPOINTMENTS' | 'INVOICES' | 'INVENTORY' | 'SETTINGS';
