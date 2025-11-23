@@ -28,7 +28,9 @@ const AppointmentsView: React.FC = () => {
       rate: 0,
       estimatedHours: 0,
       notes: '',
-      status: Status.Pending
+      status: Status.Pending,
+      recurrence: undefined,
+      seriesId: undefined
   };
   const [formData, setFormData] = useState<Partial<Appointment>>(emptyForm);
 
@@ -113,7 +115,9 @@ const AppointmentsView: React.FC = () => {
             address: formData.address || '',
             rate: Number(formData.rate) || 0,
             estimatedHours: Number(formData.estimatedHours) || 0,
-            notes: formData.notes || ''
+            notes: formData.notes || '',
+            recurrence: formData.recurrence,
+            seriesId: formData.seriesId
         };
 
         if (apptToSave.id) {
@@ -138,6 +142,27 @@ const AppointmentsView: React.FC = () => {
           await db.deleteAppointment(id);
           setSelectedAppt(null);
           fetchData();
+      }
+  };
+
+  const handleStopRecurring = async () => {
+      if (!selectedAppt || !selectedAppt.seriesId) return;
+      
+      if (confirm('Take this client off rotation? This will delete this appointment and all future recurring appointments in this series.')) {
+          setLoading(true);
+          // 1. Find all future appointments in this series
+          const futureAppts = appointments.filter(a => 
+              a.seriesId === selectedAppt.seriesId && 
+              (a.date > selectedAppt.date || (a.date === selectedAppt.date && a.time >= selectedAppt.time))
+          );
+          
+          const idsToDelete = futureAppts.map(a => a.id);
+          
+          // 2. Delete them
+          await db.deleteAppointments(idsToDelete);
+          
+          setSelectedAppt(null);
+          fetchData(); // setAppointments will handle the UI update
       }
   };
 
@@ -318,6 +343,11 @@ const AppointmentsView: React.FC = () => {
                 </div>
             </div>
             <div className="flex gap-2">
+                {selectedAppt.seriesId && (
+                    <button onClick={handleStopRecurring} className="flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-100 rounded-lg text-orange-600 hover:bg-orange-100 shadow-sm">
+                         <Briefcase size={16} /> Stop Recurring
+                    </button>
+                )}
                 <button onClick={() => handleEdit(selectedAppt)} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 shadow-sm">
                     <Edit size={16} /> Edit
                 </button>
@@ -521,6 +551,40 @@ const AppointmentsView: React.FC = () => {
                     />
                 </div>
             </div>
+
+            {/* Recurrence (New) */}
+            {!formData.id && (
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2">
+                        <input 
+                            type="checkbox" 
+                            id="isRecurring"
+                            className="rounded text-primary-600 focus:ring-primary-500"
+                            checked={!!formData.recurrence}
+                            onChange={(e) => setFormData({...formData, recurrence: e.target.checked ? 'Weekly' : undefined})}
+                        />
+                        <label htmlFor="isRecurring" className="text-sm font-medium text-blue-900">Recurring Appointment?</label>
+                    </div>
+                    
+                    {formData.recurrence && (
+                        <div>
+                            <label className="block text-xs font-medium text-blue-800 mb-1">Frequency</label>
+                            <select 
+                                className="block w-full rounded-md border-blue-200 text-sm p-2"
+                                value={formData.recurrence}
+                                onChange={(e) => setFormData({...formData, recurrence: e.target.value as any})}
+                            >
+                                <option value="Weekly">Weekly</option>
+                                <option value="Biweekly">Bi-weekly (Every 2 weeks)</option>
+                                <option value="Monthly">Monthly</option>
+                            </select>
+                            <p className="text-xs text-blue-600 mt-1">
+                                * Auto-generates appointments for the next 6 months.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Service & Status */}
             <div className="grid grid-cols-2 gap-4">

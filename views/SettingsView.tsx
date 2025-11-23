@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, JobType } from '../types';
-import { User, MapPin, Plus, Trash2, Save, Upload, Briefcase, DollarSign } from 'lucide-react';
+import { UserProfile, JobType, Invoice, Status } from '../types';
+import { User, MapPin, Plus, Trash2, Save, Upload, Briefcase, DollarSign, Database, RefreshCw } from 'lucide-react';
 import { db } from '../services/mockData';
 
 const SettingsView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   const defaultProfile: UserProfile = {
@@ -68,6 +69,51 @@ const SettingsView: React.FC = () => {
     }
     
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleBackfillInvoices = async () => {
+      if (!confirm("This will generate invoices for all appointments that do not currently have one. Continue?")) return;
+      
+      setIsSyncing(true);
+      try {
+          const appointments = await db.getAppointments();
+          const invoices = await db.getInvoices();
+          const existingApptIds = new Set(invoices.map(i => i.appointmentId).filter(Boolean));
+
+          const missing = appointments.filter(a => !existingApptIds.has(a.id));
+
+          if (missing.length === 0) {
+              setMessage({ type: 'success', text: 'All appointments already have invoices.' });
+          } else {
+              for (const appt of missing) {
+                  const invoice: Invoice = {
+                      id: Math.random().toString(36).substr(2, 9),
+                      clientId: appt.clientId,
+                      appointmentId: appt.id,
+                      clientName: appt.clientName,
+                      date: new Date().toISOString().split('T')[0], // Issue date = Today
+                      dueDate: appt.date,
+                      status: Status.Unpaid,
+                      amount: appt.rate * appt.estimatedHours,
+                      notes: `Auto-generated backup for Appointment (Job Status: ${appt.status})`,
+                      items: [{
+                          id: Math.random().toString(36).substr(2, 9),
+                          description: `${appt.serviceType} (${appt.estimatedHours} hrs)`,
+                          quantity: appt.estimatedHours,
+                          unitPrice: appt.rate
+                      }]
+                  };
+                  await db.addInvoice(invoice);
+              }
+              setMessage({ type: 'success', text: `Successfully generated ${missing.length} missing invoices.` });
+          }
+      } catch (error) {
+          console.error("Backfill failed:", error);
+          setMessage({ type: 'error', text: 'Failed to generate invoices. Check console.' });
+      } finally {
+          setIsSyncing(false);
+          setTimeout(() => setMessage(null), 5000);
+      }
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,6 +230,26 @@ const SettingsView: React.FC = () => {
                       </div>
                   </div>
               </div>
+           </div>
+           
+           {/* Data Management Section */}
+           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+               <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                   <Database size={18} /> Data Management
+               </h3>
+               <div className="space-y-4">
+                   <button
+                       onClick={handleBackfillInvoices}
+                       disabled={isSyncing}
+                       className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg border transition-colors ${isSyncing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border-primary-200 text-primary-700 hover:bg-primary-50'}`}
+                   >
+                       <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
+                       {isSyncing ? 'Processing...' : 'Backfill Missing Invoices'}
+                   </button>
+                   <p className="text-xs text-gray-500 text-center px-2">
+                       Scans all appointments and creates invoices for any that are missing.
+                   </p>
+               </div>
            </div>
         </div>
 

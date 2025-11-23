@@ -64,6 +64,8 @@ export interface Appointment {
   rate: number;
   estimatedHours: number;
   notes: string;
+  recurrence?: 'Weekly' | 'Biweekly' | 'Monthly';
+  seriesId?: string;
 }
 
 export interface InvoiceItem {

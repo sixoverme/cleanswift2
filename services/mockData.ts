@@ -141,6 +141,7 @@ interface IDataService {
     updateAppointment(apt: Appointment): Promise<Appointment>;
     updateAppointmentStatus(id: string, status: Status): Promise<void>;
     deleteAppointment(id: string): Promise<void>;
+    deleteAppointments(ids: string[]): Promise<void>;
     
     getInvoices(): Promise<Invoice[]>;
     addInvoice(inv: Invoice): Promise<Invoice>;
@@ -183,8 +184,72 @@ class MockService implements IDataService {
     async getAppointments() { await delay(300); return [...this.appointments]; }
     async addAppointment(a: Appointment) { 
         await delay(300); 
-        const na = { ...a, id: a.id || Math.random().toString(36).substr(2, 9) }; 
-        this.appointments.push(na); return na; 
+        
+        const newAppointments: Appointment[] = [];
+
+        // 1. Create the Base Appointment
+        const baseId = a.id || Math.random().toString(36).substr(2, 9);
+        const seriesId = a.recurrence ? (a.seriesId || Math.random().toString(36).substr(2, 9)) : undefined;
+        
+        const baseAppt = { ...a, id: baseId, seriesId };
+        newAppointments.push(baseAppt);
+
+        // 2. Handle Recurrence Generation
+        if (a.recurrence) {
+            const freqMap = { 'Weekly': 7, 'Biweekly': 14, 'Monthly': 28 }; // Simplified Monthly
+            const daysToAdd = freqMap[a.recurrence] || 7;
+            const limitDate = new Date();
+            limitDate.setMonth(limitDate.getMonth() + 6); // 6 Months out
+
+            let currentDate = new Date(a.date);
+            
+            // Loop
+            while (true) {
+                // Increment
+                if (a.recurrence === 'Monthly') {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                } else {
+                    currentDate.setDate(currentDate.getDate() + daysToAdd);
+                }
+
+                if (currentDate > limitDate) break;
+
+                newAppointments.push({
+                    ...a,
+                    id: Math.random().toString(36).substr(2, 9),
+                    date: currentDate.toISOString().split('T')[0],
+                    seriesId: seriesId
+                });
+            }
+        }
+
+        // 3. Save All
+        this.appointments.push(...newAppointments); 
+
+        // 4. Auto-create Invoice ONLY for the base appointment (Immediate need)
+        // NOTE: Future invoices are usually generated when the job is done or upcoming, 
+        // but for now we'll just invoice the first one to avoid clutter.
+        const na = newAppointments[0];
+        const invoice: Invoice = {
+            id: Math.random().toString(36).substr(2, 9),
+            clientId: na.clientId,
+            appointmentId: na.id,
+            clientName: na.clientName,
+            date: new Date().toISOString().split('T')[0],
+            dueDate: na.date,
+            status: Status.Unpaid,
+            amount: na.rate * na.estimatedHours,
+            notes: `Generated from Appointment (Job Status: ${na.status})`,
+            items: [{
+                id: Math.random().toString(36).substr(2, 9),
+                description: `${na.serviceType} (${na.estimatedHours} hrs)`,
+                quantity: na.estimatedHours,
+                unitPrice: na.rate
+            }]
+        };
+        this.invoices.push(invoice);
+
+        return na; 
     }
     async updateAppointment(a: Appointment) { 
         await delay(300); 
@@ -195,6 +260,7 @@ class MockService implements IDataService {
         const a = this.appointments.find(x => x.id === id); if(a) a.status = status; 
     }
     async deleteAppointment(id: string) { await delay(300); this.appointments = this.appointments.filter(x => x.id !== id); }
+    async deleteAppointments(ids: string[]) { await delay(300); this.appointments = this.appointments.filter(x => !ids.includes(x.id)); }
 
     async getInvoices() { await delay(300); return [...this.invoices]; }
     async addInvoice(i: Invoice) { 
@@ -364,7 +430,7 @@ class GoogleSheetsService implements IDataService {
         
         // Actually, let's add explicit headers for clarity in the sheet
         const clientHeader = ["ID", "Name", "House Notes", "General Notes", "Contacts (JSON)", "Locations (JSON)", "Children (JSON)", "Pets (JSON)"];
-        const apptHeader = ["ID", "ClientID", "Client Name", "Date", "Time", "Service", "Status", "Address", "Rate", "Hours", "Notes"];
+        const apptHeader = ["ID", "ClientID", "Client Name", "Date", "Time", "Service", "Status", "Address", "Rate", "Hours", "Notes", "Frequency", "SeriesID"];
         const invHeader = ["ID", "ClientID", "ApptID", "Client Name", "Issue Date", "Due Date", "Status", "Amount", "Notes", "Items (JSON)"];
         const invenHeader = ["ID", "Item Name", "Quantity", "Unit", "Min Threshold", "Status", "Supplier", "Cost", "Notes"];
         const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "Avatar (Base64)", "JobTypes (JSON)"];
@@ -389,12 +455,13 @@ class GoogleSheetsService implements IDataService {
     });
 
     private serializeAppointment = (a: Appointment) => [
-        a.id, a.clientId, a.clientName, a.date, a.time, a.serviceType, a.status, a.address, a.rate, a.estimatedHours, a.notes
+        a.id, a.clientId, a.clientName, a.date, a.time, a.serviceType, a.status, a.address, a.rate, a.estimatedHours, a.notes, a.recurrence || '', a.seriesId || ''
     ];
     private deserializeAppointment = (row: any[]): Appointment => ({
         id: row[0], clientId: row[1], clientName: row[2], date: row[3], time: row[4],
         serviceType: row[5], status: row[6] as Status, address: row[7],
-        rate: Number(row[8]), estimatedHours: Number(row[9]), notes: row[10]
+        rate: Number(row[8]), estimatedHours: Number(row[9]), notes: row[10],
+        recurrence: row[11] || undefined, seriesId: row[12] || undefined
     });
 
     private serializeInvoice = (i: Invoice) => [
@@ -486,6 +553,13 @@ class GoogleSheetsService implements IDataService {
         });
     }
 
+    private async appendRows(sheetName: string, rows: any[][]) {
+        await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A1:append?valueInputOption=USER_ENTERED`, {
+            method: 'POST',
+            body: JSON.stringify({ values: rows })
+        });
+    }
+
     private async clearSheet(sheetName: string) {
         await this.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${sheetName}!A:ZZ:clear`, {
             method: 'POST'
@@ -534,8 +608,67 @@ class GoogleSheetsService implements IDataService {
 
     async getAppointments() { return this.readSheet(SHEETS.APPOINTMENTS, this.deserializeAppointment); }
     async addAppointment(a: Appointment) {
-        const na = { ...a, id: a.id || Math.random().toString(36).substr(2, 9) };
-        await this.appendRow(SHEETS.APPOINTMENTS, this.serializeAppointment(na));
+        
+        const newAppointments: Appointment[] = [];
+
+        // 1. Base Appointment
+        const baseId = a.id || Math.random().toString(36).substr(2, 9);
+        const seriesId = a.recurrence ? (a.seriesId || Math.random().toString(36).substr(2, 9)) : undefined;
+        
+        const baseAppt = { ...a, id: baseId, seriesId };
+        newAppointments.push(baseAppt);
+
+        // 2. Recurrence Generation
+        if (a.recurrence) {
+            const freqMap = { 'Weekly': 7, 'Biweekly': 14, 'Monthly': 28 };
+            const daysToAdd = freqMap[a.recurrence] || 7;
+            const limitDate = new Date();
+            limitDate.setMonth(limitDate.getMonth() + 6); // 6 Months out
+
+            let currentDate = new Date(a.date);
+            
+            while (true) {
+                if (a.recurrence === 'Monthly') {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                } else {
+                    currentDate.setDate(currentDate.getDate() + daysToAdd);
+                }
+
+                if (currentDate > limitDate) break;
+
+                newAppointments.push({
+                    ...a,
+                    id: Math.random().toString(36).substr(2, 9),
+                    date: currentDate.toISOString().split('T')[0],
+                    seriesId: seriesId
+                });
+            }
+        }
+
+        // 3. Batch Save
+        await this.appendRows(SHEETS.APPOINTMENTS, newAppointments.map(this.serializeAppointment));
+
+        // 4. Auto-create Invoice (Only for base)
+        const na = newAppointments[0];
+        const invoice: Invoice = {
+            id: Math.random().toString(36).substr(2, 9),
+            clientId: na.clientId,
+            appointmentId: na.id,
+            clientName: na.clientName,
+            date: new Date().toISOString().split('T')[0],
+            dueDate: na.date,
+            status: Status.Unpaid,
+            amount: na.rate * na.estimatedHours,
+            notes: `Generated from Appointment (Job Status: ${na.status})`,
+            items: [{
+                id: Math.random().toString(36).substr(2, 9),
+                description: `${na.serviceType} (${na.estimatedHours} hrs)`,
+                quantity: na.estimatedHours,
+                unitPrice: na.rate
+            }]
+        };
+        await this.addInvoice(invoice);
+
         return na;
     }
     async updateAppointment(a: Appointment) {
@@ -547,6 +680,9 @@ class GoogleSheetsService implements IDataService {
     }
     async deleteAppointment(id: string) {
         await this.updateSheetData(SHEETS.APPOINTMENTS, this.deserializeAppointment, this.serializeAppointment, items => items.filter(i => i.id !== id));
+    }
+    async deleteAppointments(ids: string[]) {
+        await this.updateSheetData(SHEETS.APPOINTMENTS, this.deserializeAppointment, this.serializeAppointment, items => items.filter(i => !ids.includes(i.id)));
     }
 
     async getInvoices() { return this.readSheet(SHEETS.INVOICES, this.deserializeInvoice); }
@@ -631,6 +767,7 @@ class DBProxy implements IDataService {
     updateAppointment(a: Appointment) { return this.service.updateAppointment(a); }
     updateAppointmentStatus(id: string, s: Status) { return this.service.updateAppointmentStatus(id, s); }
     deleteAppointment(id: string) { return this.service.deleteAppointment(id); }
+    deleteAppointments(ids: string[]) { return this.service.deleteAppointments(ids); }
 
     getInvoices() { return this.service.getInvoices(); }
     addInvoice(i: Invoice) { return this.service.addInvoice(i); }
