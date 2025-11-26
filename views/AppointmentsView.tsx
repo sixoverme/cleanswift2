@@ -11,7 +11,7 @@ const AppointmentsView: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('CARDS');
+  const [viewMode, setViewMode] = useState<ViewMode>('CALENDAR');
   
   // State for Detail View
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
@@ -176,7 +176,7 @@ const AppointmentsView: React.FC = () => {
   };
 
   // --- JOB TRACKING ---
-  const formatTime = (seconds: number) => {
+  const formatJobDuration = (seconds: number) => {
       const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
       const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
       const s = (Math.floor(seconds) % 60).toString().padStart(2, '0');
@@ -368,6 +368,15 @@ const AppointmentsView: React.FC = () => {
       return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric'});
   };
 
+  const formatTime = (timeStr: string) => {
+      if (!timeStr) return '';
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours);
+      date.setMinutes(minutes);
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
   // --- RENDER HELPERS ---
 
   const renderCalendarView = () => {
@@ -401,7 +410,7 @@ const AppointmentsView: React.FC = () => {
                             onClick={() => setSelectedAppt(apt)}
                             className={`text-xs p-1 rounded cursor-pointer truncate border-l-2 ${apt.status === Status.Completed ? 'bg-green-50 border-green-500 text-green-700' : 'bg-blue-50 border-blue-500 text-blue-700'}`}
                         >
-                            {apt.time} - {apt.clientName}
+                            {formatTime(apt.time)} - {apt.clientName}
                         </div>
                     ))}
                 </div>
@@ -463,7 +472,7 @@ const AppointmentsView: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-2">
                           <Clock size={16} className="text-primary-500" />
-                          <span>{apt.time} ({apt.estimatedHours} hrs)</span>
+                          <span>{formatTime(apt.time)} ({apt.estimatedHours} hrs)</span>
                       </div>
                       <div className="flex items-center gap-2">
                           <MapPin size={16} className="text-primary-500" />
@@ -547,7 +556,7 @@ const AppointmentsView: React.FC = () => {
                              </div>
                              <div className="flex items-center gap-3">
                                 <Clock size={18} className="text-primary-500" />
-                                <span className="text-gray-900 font-medium">{selectedAppt.time} <span className="text-gray-500 text-sm">({selectedAppt.estimatedHours} hrs)</span></span>
+                                <span className="text-gray-900 font-medium">{formatTime(selectedAppt.time)} <span className="text-gray-500 text-sm">({selectedAppt.estimatedHours} hrs)</span></span>
                              </div>
                         </div>
                         <div>
@@ -575,7 +584,7 @@ const AppointmentsView: React.FC = () => {
                     <div className="flex flex-col md:flex-row items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <div className="text-center md:text-left mb-4 md:mb-0">
                             <p className="text-sm font-medium text-gray-500">Elapsed Time</p>
-                            <p className="text-4xl font-bold text-gray-800 tabular-nums">{formatTime(elapsedTime)}</p>
+                            <p className="text-4xl font-bold text-gray-800 tabular-nums">{formatJobDuration(elapsedTime)}</p>
                         </div>
                         <div className="flex items-center gap-3">
                             {selectedAppt.jobLog?.endTime ? (
@@ -782,39 +791,45 @@ const AppointmentsView: React.FC = () => {
                 </div>
             </div>
 
-            {/* Recurrence (New) */}
-            {!formData.id && (
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                    <div className="flex items-center gap-2 mb-2">
-                        <input 
-                            type="checkbox" 
-                            id="isRecurring"
-                            className="rounded text-primary-600 focus:ring-primary-500"
-                            checked={!!formData.recurrence}
-                            onChange={(e) => setFormData({...formData, recurrence: e.target.checked ? 'Weekly' : undefined})}
-                        />
-                        <label htmlFor="isRecurring" className="text-sm font-medium text-blue-900">Recurring Appointment?</label>
-                    </div>
-                    
-                    {formData.recurrence && (
-                        <div>
-                            <label className="block text-xs font-medium text-blue-800 mb-1">Frequency</label>
-                            <select 
-                                className="block w-full rounded-md border-blue-200 text-sm p-2"
-                                value={formData.recurrence}
-                                onChange={(e) => setFormData({...formData, recurrence: e.target.value as any})}
-                            >
-                                <option value="Weekly">Weekly</option>
-                                <option value="Biweekly">Bi-weekly (Every 2 weeks)</option>
-                                <option value="Monthly">Monthly</option>
-                            </select>
+            {/* Recurrence */}
+            <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                    <input 
+                        type="checkbox" 
+                        id="isRecurring"
+                        className="rounded text-primary-600 focus:ring-primary-500 disabled:opacity-50"
+                        checked={Boolean(formData.recurrence)}
+                        disabled={!!formData.seriesId}
+                        onChange={(e) => setFormData({...formData, recurrence: e.target.checked ? 'Weekly' : undefined})}
+                    />
+                    <label htmlFor="isRecurring" className="text-sm font-bold text-blue-900">Recurring Schedule?</label>
+                </div>
+                
+                {formData.recurrence && (
+                    <div>
+                        <label className="block text-xs font-medium text-blue-800 mb-1">Frequency</label>
+                        <select 
+                            className="block w-full rounded-md border-blue-200 text-sm p-2 disabled:opacity-50"
+                            value={formData.recurrence}
+                            disabled={!!formData.seriesId}
+                            onChange={(e) => setFormData({...formData, recurrence: e.target.value as any})}
+                        >
+                            <option value="Weekly">Weekly</option>
+                            <option value="Biweekly">Bi-weekly (Every 2 weeks)</option>
+                            <option value="Monthly">Monthly</option>
+                        </select>
+                        {!formData.seriesId ? (
                             <p className="text-xs text-blue-600 mt-1">
                                 * Auto-generates appointments for the next 6 months.
                             </p>
-                        </div>
-                    )}
-                </div>
-            )}
+                        ) : (
+                            <p className="text-xs text-blue-600 mt-1">
+                                * Part of a series. To change frequency, stop recurring and create new.
+                            </p>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Service & Status */}
             <div className="grid grid-cols-2 gap-4">

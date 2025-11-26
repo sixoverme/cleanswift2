@@ -285,6 +285,36 @@ class MockService implements IDataService {
     }
     async updateAppointment(a: Appointment) { 
         await delay(300); 
+        
+        // Handle converting to recurring (if recurrence set but no seriesId)
+        if (a.recurrence && !a.seriesId) {
+            a.seriesId = Math.random().toString(36).substr(2, 9);
+            const newAppointments: Appointment[] = [];
+            const freqMap = { 'Weekly': 7, 'Biweekly': 14, 'Monthly': 28 };
+            const daysToAdd = freqMap[a.recurrence] || 7;
+            const limitDate = new Date();
+            limitDate.setMonth(limitDate.getMonth() + 6); 
+
+            let currentDate = new Date(a.date);
+            
+            while (true) {
+                if (a.recurrence === 'Monthly') {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                } else {
+                    currentDate.setDate(currentDate.getDate() + daysToAdd);
+                }
+
+                if (currentDate > limitDate) break;
+
+                newAppointments.push({
+                    ...a,
+                    id: Math.random().toString(36).substr(2, 9),
+                    date: currentDate.toISOString().split('T')[0]
+                });
+            }
+            this.appointments.push(...newAppointments);
+        }
+
         this.appointments = this.appointments.map(x => x.id === a.id ? a : x); return a; 
     }
     async updateAppointmentStatus(id: string, status: Status) { 
@@ -709,6 +739,35 @@ class GoogleSheetsService implements IDataService {
         return na;
     }
     async updateAppointment(a: Appointment) {
+        // Handle converting to recurring (if recurrence set but no seriesId)
+        if (a.recurrence && !a.seriesId) {
+            a.seriesId = Math.random().toString(36).substr(2, 9);
+            const newAppointments: Appointment[] = [];
+            const freqMap = { 'Weekly': 7, 'Biweekly': 14, 'Monthly': 28 };
+            const daysToAdd = freqMap[a.recurrence] || 7;
+            const limitDate = new Date();
+            limitDate.setMonth(limitDate.getMonth() + 6); 
+
+            let currentDate = new Date(a.date);
+            
+            while (true) {
+                if (a.recurrence === 'Monthly') {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                } else {
+                    currentDate.setDate(currentDate.getDate() + daysToAdd);
+                }
+
+                if (currentDate > limitDate) break;
+
+                newAppointments.push({
+                    ...a,
+                    id: Math.random().toString(36).substr(2, 9),
+                    date: currentDate.toISOString().split('T')[0]
+                });
+            }
+            await this.appendRows(SHEETS.APPOINTMENTS, newAppointments.map(this.serializeAppointment));
+        }
+
         await this.updateSheetData(SHEETS.APPOINTMENTS, this.deserializeAppointment, this.serializeAppointment, items => items.map(i => i.id === a.id ? a : i));
         return a;
     }
