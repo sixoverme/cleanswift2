@@ -7,7 +7,7 @@ import { Plus, Trash2, Calendar, Grid, Clock, MapPin, User, DollarSign, Briefcas
 const generateId = () => Math.random().toString(36).substr(2, 9);
 type ViewMode = 'CARDS' | 'CALENDAR';
 
-const AppointmentsView: React.FC = () => {
+const AppointmentsView: React.FC<{initialAppointmentId?: string | null, onClearInitialAppointment?: () => void}> = ({initialAppointmentId, onClearInitialAppointment}) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,10 +45,29 @@ const AppointmentsView: React.FC = () => {
   // Job Timer State
   const [elapsedTime, setElapsedTime] = useState(0);
 
+  // Log Edit State
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [logFormData, setLogFormData] = useState<{
+      startTime: string;
+      endTime: string;
+      breaks: { startTime: string; endTime: string }[];
+  }>({ startTime: '', endTime: '', breaks: [] });
+
   useEffect(() => {
     fetchData();
     loadSettings();
   }, []);
+
+  // Handle Initial Selection (Deep Linking)
+  useEffect(() => {
+      if (initialAppointmentId && appointments.length > 0) {
+          const target = appointments.find(a => a.id === initialAppointmentId);
+          if (target) {
+              setSelectedAppt(target);
+              if (onClearInitialAppointment) onClearInitialAppointment();
+          }
+      }
+  }, [initialAppointmentId, appointments]);
 
   const loadSettings = async () => {
       try {
@@ -228,6 +247,8 @@ const AppointmentsView: React.FC = () => {
           }
       }
       setSelectedAppt(updatedAppt);
+      // Implicit save for robust tracking
+      db.updateAppointment(updatedAppt);
   };
 
   const pauseTimer = () => {
@@ -238,6 +259,7 @@ const AppointmentsView: React.FC = () => {
           if (!lastBreak || lastBreak.endTime) {
               updatedAppt.jobLog.breaks.push({ startTime: now });
               setSelectedAppt(updatedAppt);
+              db.updateAppointment(updatedAppt);
           }
       }
   };
@@ -301,6 +323,96 @@ const AppointmentsView: React.FC = () => {
       }
 
       await fetchData();
+  };
+
+  // --- MANUAL LOG EDITING ---
+  const toLocalInput = (iso: string | undefined) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const offset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+  };
+
+  const fromLocalInput = (local: string) => {
+      if (!local) return undefined;
+      return new Date(local).toISOString();
+  };
+
+  const openLogEditor = () => {
+      if (!selectedAppt) return;
+      
+      if (selectedAppt.jobLog) {
+        const log = selectedAppt.jobLog;
+        setLogFormData({
+            startTime: toLocalInput(log.startTime),
+            endTime: toLocalInput(log.endTime),
+            breaks: log.breaks.map(b => ({
+                startTime: toLocalInput(b.startTime),
+                endTime: toLocalInput(b.endTime) || ''
+            }))
+        });
+      } else {
+          // Initialize for new manual entry
+          const now = new Date();
+          const offset = now.getTimezoneOffset() * 60000;
+          const localNow = new Date(now.getTime() - offset).toISOString().slice(0, 16);
+          
+          setLogFormData({
+              startTime: localNow,
+              endTime: '',
+              breaks: []
+          });
+      }
+      setIsLogModalOpen(true);
+  };
+
+  const handleSaveLog = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedAppt) return;
+
+      // Basic Validation
+      if (!logFormData.startTime) {
+          alert("Start time is required.");
+          return;
+      }
+
+      const newStartTime = fromLocalInput(logFormData.startTime) as string;
+      const newEndTime = fromLocalInput(logFormData.endTime);
+      const newBreaks = logFormData.breaks.map(b => ({
+          startTime: fromLocalInput(b.startTime) as string,
+          endTime: fromLocalInput(b.endTime)
+      })).filter(b => b.startTime); // Ensure start time exists
+
+      // Recalculate Total Hours
+      let totalHours = 0;
+      if (newEndTime) {
+          const start = new Date(newStartTime).getTime();
+          const end = new Date(newEndTime).getTime();
+          let breakDuration = 0;
+          newBreaks.forEach(b => {
+              if (b.endTime) {
+                  breakDuration += new Date(b.endTime).getTime() - new Date(b.startTime).getTime();
+              }
+          });
+          totalHours = (end - start - breakDuration) / (1000 * 60 * 60);
+          if (totalHours < 0) totalHours = 0; // Sanity check
+      }
+
+      const updatedAppt = {
+          ...selectedAppt,
+          jobLog: {
+              startTime: newStartTime,
+              endTime: newEndTime,
+              breaks: newBreaks,
+              totalHours: totalHours
+          },
+          status: newEndTime ? Status.Completed : Status.Active // Auto-update status based on completion
+      };
+
+      setSelectedAppt(updatedAppt);
+      await db.updateAppointment(updatedAppt);
+      setIsLogModalOpen(false);
+      fetchData();
   };
 
   const handleChecklistItemToggle = (itemId: string) => {
@@ -581,32 +693,58 @@ const AppointmentsView: React.FC = () => {
                     <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
                         <Clock size={18}/> Job Tracker
                     </h3>
+                    
                     <div className="flex flex-col md:flex-row items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <div className="text-center md:text-left mb-4 md:mb-0">
-                            <p className="text-sm font-medium text-gray-500">Elapsed Time</p>
-                            <p className="text-4xl font-bold text-gray-800 tabular-nums">{formatJobDuration(elapsedTime)}</p>
+                            {!selectedAppt.jobLog ? (
+                                <p className="text-sm font-medium text-gray-500">Ready to Start?</p>
+                            ) : (
+                                <>
+                                    <p className={`text-sm font-bold uppercase tracking-wider mb-1 ${selectedAppt.jobLog.breaks.some(b => !b.endTime) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                        {selectedAppt.jobLog.breaks.some(b => !b.endTime) ? 'On Break' : 'In Progress'}
+                                    </p>
+                                    <p className="text-2xl font-bold text-gray-800">
+                                        Started: {formatTime(new Date(selectedAppt.jobLog.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false}))}
+                                    </p>
+                                </>
+                            )}
                         </div>
+                        
                         <div className="flex items-center gap-3">
                             {selectedAppt.jobLog?.endTime ? (
                                 <p className="text-green-600 font-semibold">Job Completed</p>
                             ) : (
                                 <>
-                                    {!selectedAppt.jobLog || (selectedAppt.jobLog.breaks.length > 0 && selectedAppt.jobLog.breaks[selectedAppt.jobLog.breaks.length-1].endTime === undefined) ? (
+                                    {!selectedAppt.jobLog ? (
                                         <button onClick={startTimer} className="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-md transition-colors">
-                                            <PlayCircle size={20}/>
-                                            {selectedAppt.jobLog ? 'Resume' : 'Start Job'}
+                                            <PlayCircle size={20}/> Start Job
                                         </button>
                                     ) : (
-                                        <button onClick={pauseTimer} className="flex items-center gap-2 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg shadow-md transition-colors">
-                                            <PauseCircle size={20}/> Pause Break
-                                        </button>
+                                        <>
+                                            {selectedAppt.jobLog.breaks.length > 0 && !selectedAppt.jobLog.breaks[selectedAppt.jobLog.breaks.length - 1].endTime ? (
+                                                <button onClick={startTimer} className="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-md transition-colors">
+                                                    <PlayCircle size={20}/> Resume
+                                                </button>
+                                            ) : (
+                                                <button onClick={pauseTimer} className="flex items-center gap-2 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg shadow-md transition-colors">
+                                                    <PauseCircle size={20}/> Pause
+                                                </button>
+                                            )}
+                                            
+                                            <button onClick={stopTimer} className="flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg shadow-md transition-colors">
+                                                <StopCircle size={20}/> End Job
+                                            </button>
+                                        </>
                                     )}
-                                    <button onClick={stopTimer} disabled={!selectedAppt.jobLog} className={`flex items-center gap-2 px-6 py-3 rounded-lg shadow-md transition-colors ${!selectedAppt.jobLog ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600 text-white font-semibold'}`}>
-                                        <StopCircle size={20}/> End Job
-                                    </button>
                                 </>
                             )}
                         </div>
+                    </div>
+                    
+                    <div className="mt-4 flex justify-end">
+                        <button onClick={openLogEditor} className="text-sm text-primary-600 hover:text-primary-800 font-medium underline">
+                            {selectedAppt.jobLog ? "Edit Time Log / Fix Entry" : "Add Manual Time Log"}
+                        </button>
                     </div>
                 </div>
 
@@ -961,6 +1099,88 @@ const AppointmentsView: React.FC = () => {
                 <button type="submit" disabled={submitting} className={`px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     {submitting ? 'Saving...' : 'Save Appointment'}
                 </button>
+            </div>
+        </form>
+      </Modal>
+
+      {/* EDIT TIME LOG MODAL */}
+      <Modal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} title="Edit Time Log">
+        <form onSubmit={handleSaveLog} className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                <input 
+                    type="datetime-local"
+                    required
+                    className="block w-full rounded-lg border border-gray-300 p-2"
+                    value={logFormData.startTime}
+                    onChange={(e) => setLogFormData({...logFormData, startTime: e.target.value})}
+                />
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">Breaks</label>
+                    <button 
+                        type="button"
+                        onClick={() => setLogFormData({...logFormData, breaks: [...logFormData.breaks, { startTime: '', endTime: '' }]})}
+                        className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                    >
+                        + Add Break
+                    </button>
+                </div>
+                {logFormData.breaks.map((b, idx) => (
+                    <div key={idx} className="flex items-end gap-2 p-2 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                            <label className="text-xs text-gray-500">Start</label>
+                            <input 
+                                type="datetime-local"
+                                className="w-full rounded border border-gray-300 p-1 text-sm"
+                                value={b.startTime}
+                                onChange={(e) => {
+                                    const newBreaks = [...logFormData.breaks];
+                                    newBreaks[idx].startTime = e.target.value;
+                                    setLogFormData({...logFormData, breaks: newBreaks});
+                                }}
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-xs text-gray-500">End</label>
+                            <input 
+                                type="datetime-local"
+                                className="w-full rounded border border-gray-300 p-1 text-sm"
+                                value={b.endTime}
+                                onChange={(e) => {
+                                    const newBreaks = [...logFormData.breaks];
+                                    newBreaks[idx].endTime = e.target.value;
+                                    setLogFormData({...logFormData, breaks: newBreaks});
+                                }}
+                            />
+                        </div>
+                        <button 
+                            type="button" 
+                            onClick={() => setLogFormData({...logFormData, breaks: logFormData.breaks.filter((_, i) => i !== idx)})}
+                            className="mb-1 p-1 text-gray-400 hover:text-red-500"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                ))}
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Time (Optional)</label>
+                <input 
+                    type="datetime-local"
+                    className="block w-full rounded-lg border border-gray-300 p-2"
+                    value={logFormData.endTime}
+                    onChange={(e) => setLogFormData({...logFormData, endTime: e.target.value})}
+                />
+                <p className="text-xs text-gray-500 mt-1">Leave blank if the job is still active.</p>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 mt-6">
+                 <button type="button" onClick={() => setIsLogModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">Cancel</button>
+                 <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700">Save Log Changes</button>
             </div>
         </form>
       </Modal>
