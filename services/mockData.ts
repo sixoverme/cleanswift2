@@ -193,25 +193,57 @@ interface IDataService {
 // --- MOCK SERVICE (Fallback) ---
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const STORAGE_KEYS = {
+    CLIENTS: 'cleanswift_mock_clients',
+    APPOINTMENTS: 'cleanswift_mock_appointments',
+    INVOICES: 'cleanswift_mock_invoices',
+    INVENTORY: 'cleanswift_mock_inventory',
+    SETTINGS: 'cleanswift_user_profile'
+};
+
 class MockService implements IDataService {
-    private clients = [...INITIAL_CLIENTS];
-    private appointments = [...INITIAL_APPOINTMENTS];
-    private invoices = [...INITIAL_INVOICES];
-    private inventory = [...INITIAL_INVENTORY];
+    private clients: Client[];
+    private appointments: Appointment[];
+    private invoices: Invoice[];
+    private inventory: InventoryItem[];
     private settings: UserProfile | null = null;
+
+    constructor() {
+        // Load from LocalStorage or Init
+        this.clients = this.load(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+        this.appointments = this.load(STORAGE_KEYS.APPOINTMENTS, INITIAL_APPOINTMENTS);
+        this.invoices = this.load(STORAGE_KEYS.INVOICES, INITIAL_INVOICES);
+        this.inventory = this.load(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
+    }
+
+    private load<T>(key: string, fallback: T[]): T[] {
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : [...fallback];
+    }
+
+    private save(key: string, data: any[]) {
+        localStorage.setItem(key, JSON.stringify(data));
+    }
 
     async getClients() { await delay(300); return [...this.clients]; }
     async addClient(c: Client) { 
         await delay(300); 
         const nc = { ...c, id: c.id || Math.random().toString(36).substr(2, 9) }; 
-        this.clients.push(nc); return nc; 
+        this.clients.push(nc);
+        this.save(STORAGE_KEYS.CLIENTS, this.clients); 
+        return nc; 
     }
     async updateClient(c: Client) {
         await delay(300);
         this.clients = this.clients.map(x => x.id === c.id ? c : x);
+        this.save(STORAGE_KEYS.CLIENTS, this.clients);
         return c;
     }
-    async deleteClient(id: string) { await delay(300); this.clients = this.clients.filter(c => c.id !== id); }
+    async deleteClient(id: string) { 
+        await delay(300); 
+        this.clients = this.clients.filter(c => c.id !== id);
+        this.save(STORAGE_KEYS.CLIENTS, this.clients);
+    }
 
     async getAppointments() { await delay(300); return [...this.appointments]; }
     async addAppointment(a: Appointment) { 
@@ -256,7 +288,8 @@ class MockService implements IDataService {
         }
 
         // 3. Save All
-        this.appointments.push(...newAppointments); 
+        this.appointments.push(...newAppointments);
+        this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments); 
 
         // 4. Auto-create Invoice ONLY for the base appointment (Immediate need)
         // NOTE: Future invoices are usually generated when the job is done or upcoming, 
@@ -280,6 +313,7 @@ class MockService implements IDataService {
             }]
         };
         this.invoices.push(invoice);
+        this.save(STORAGE_KEYS.INVOICES, this.invoices);
 
         return na; 
     }
@@ -315,20 +349,36 @@ class MockService implements IDataService {
             this.appointments.push(...newAppointments);
         }
 
-        this.appointments = this.appointments.map(x => x.id === a.id ? a : x); return a; 
+        this.appointments = this.appointments.map(x => x.id === a.id ? a : x);
+        this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments);
+        return a; 
     }
     async updateAppointmentStatus(id: string, status: Status) { 
         await delay(300); 
-        const a = this.appointments.find(x => x.id === id); if(a) a.status = status; 
+        const a = this.appointments.find(x => x.id === id); 
+        if(a) {
+            a.status = status; 
+            this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments);
+        }
     }
-    async deleteAppointment(id: string) { await delay(300); this.appointments = this.appointments.filter(x => x.id !== id); }
-    async deleteAppointments(ids: string[]) { await delay(300); this.appointments = this.appointments.filter(x => !ids.includes(x.id)); }
+    async deleteAppointment(id: string) { 
+        await delay(300); 
+        this.appointments = this.appointments.filter(x => x.id !== id); 
+        this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments);
+    }
+    async deleteAppointments(ids: string[]) { 
+        await delay(300); 
+        this.appointments = this.appointments.filter(x => !ids.includes(x.id));
+        this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments);
+    }
 
     async getInvoices() { await delay(300); return [...this.invoices]; }
     async addInvoice(i: Invoice) { 
         await delay(300); 
         const ni = { ...i, id: i.id || Math.random().toString(36).substr(2, 9) }; 
-        this.invoices.push(ni); return ni; 
+        this.invoices.push(ni); 
+        this.save(STORAGE_KEYS.INVOICES, this.invoices);
+        return ni; 
     }
     async updateInvoice(i: Invoice) {
         await delay(300);
@@ -336,22 +386,33 @@ class MockService implements IDataService {
         if (idx > -1) {
             // Ensure new properties are merged correctly
             this.invoices[idx] = { ...this.invoices[idx], ...i };
+            this.save(STORAGE_KEYS.INVOICES, this.invoices);
         }
         return i;
     }
-    async deleteInvoice(id: string) { await delay(300); this.invoices = this.invoices.filter(x => x.id !== id); }
+    async deleteInvoice(id: string) { 
+        await delay(300); 
+        this.invoices = this.invoices.filter(x => x.id !== id); 
+        this.save(STORAGE_KEYS.INVOICES, this.invoices);
+    }
 
     async getInventory() { await delay(300); return [...this.inventory]; }
     async updateInventoryQuantity(id: string, q: number) {
         await delay(100);
         const i = this.inventory.find(x => x.id === id);
-        if(i) { i.quantity = q; i.status = q <= i.minThreshold ? Status.LowStock : Status.InStock; }
+        if(i) { 
+            i.quantity = q; 
+            i.status = q <= i.minThreshold ? Status.LowStock : Status.InStock; 
+            this.save(STORAGE_KEYS.INVENTORY, this.inventory);
+        }
     }
     async addInventoryItem(i: InventoryItem) { 
         await delay(300); 
         const ni = { ...i, id: i.id || Math.random().toString(36).substr(2, 9) }; 
         ni.status = ni.quantity <= ni.minThreshold ? Status.LowStock : Status.InStock;
-        this.inventory.push(ni); return ni; 
+        this.inventory.push(ni);
+        this.save(STORAGE_KEYS.INVENTORY, this.inventory);
+        return ni; 
     }
     async updateInventoryItem(i: InventoryItem) { 
         await delay(300); 
@@ -359,16 +420,21 @@ class MockService implements IDataService {
         if(idx !== -1) { 
             i.status = i.quantity <= i.minThreshold ? Status.LowStock : Status.InStock;
             this.inventory[idx] = i; 
+            this.save(STORAGE_KEYS.INVENTORY, this.inventory);
         } 
         return i; 
     }
-    async deleteInventoryItem(id: string) { await delay(300); this.inventory = this.inventory.filter(x => x.id !== id); }
+    async deleteInventoryItem(id: string) { 
+        await delay(300); 
+        this.inventory = this.inventory.filter(x => x.id !== id); 
+        this.save(STORAGE_KEYS.INVENTORY, this.inventory);
+    }
 
     async getSettings() {
         await delay(300);
         // Try to load from localStorage if in mock mode but user wants persistence simulation
         if (!this.settings) {
-             const stored = localStorage.getItem('cleanswift_user_profile');
+             const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
              if (stored) return JSON.parse(stored);
         }
         return this.settings;
@@ -377,7 +443,7 @@ class MockService implements IDataService {
     async saveSettings(s: UserProfile) {
         await delay(300);
         this.settings = s;
-        localStorage.setItem('cleanswift_user_profile', JSON.stringify(s));
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(s));
     }
 }
 
@@ -497,7 +563,7 @@ class GoogleSheetsService implements IDataService {
         
         // Actually, let's add explicit headers for clarity in the sheet
         const clientHeader = ["ID", "Name", "House Notes", "General Notes", "Contacts (JSON)", "Locations (JSON)", "Children (JSON)", "Pets (JSON)"];
-        const apptHeader = ["ID", "ClientID", "Client Name", "Date", "Time", "Service", "Status", "Address", "Rate", "Hours", "Notes", "Frequency", "SeriesID"];
+        const apptHeader = ["ID", "ClientID", "Client Name", "Date", "Time", "Service", "Status", "Address", "Rate", "Hours", "Notes", "Frequency", "SeriesID", "Checklist (JSON)", "JobLog (JSON)"];
         const invHeader = ["ID", "ClientID", "ApptID", "Client Name", "Issue Date", "Due Date", "Status", "Amount", "Notes", "Items (JSON)"];
         const invenHeader = ["ID", "Item Name", "Quantity", "Unit", "Min Threshold", "Status", "Supplier", "Cost", "Notes"];
         const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "Avatar (Base64)", "JobTypes (JSON)"];
@@ -522,13 +588,16 @@ class GoogleSheetsService implements IDataService {
     });
 
     private serializeAppointment = (a: Appointment) => [
-        a.id, a.clientId, a.clientName, a.date, a.time, a.serviceType, a.status, a.address, a.rate, a.estimatedHours, a.notes, a.recurrence || '', a.seriesId || ''
+        a.id, a.clientId, a.clientName, a.date, a.time, a.serviceType, a.status, a.address, a.rate, a.estimatedHours, a.notes, a.recurrence || '', a.seriesId || '',
+        JSON.stringify(a.checklist || []), JSON.stringify(a.jobLog || null)
     ];
     private deserializeAppointment = (row: any[]): Appointment => ({
         id: row[0], clientId: row[1], clientName: row[2], date: row[3], time: row[4],
         serviceType: row[5], status: row[6] as Status, address: row[7],
         rate: Number(row[8]), estimatedHours: Number(row[9]), notes: row[10],
-        recurrence: row[11] || undefined, seriesId: row[12] || undefined
+        recurrence: row[11] || undefined, seriesId: row[12] || undefined,
+        checklist: row[13] ? JSON.parse(row[13]) : [],
+        jobLog: row[14] ? JSON.parse(row[14]) : undefined
     });
 
     private serializeInvoice = (i: Invoice) => [

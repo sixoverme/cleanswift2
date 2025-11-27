@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../services/mockData';
-import { Users, Calendar, AlertCircle, DollarSign, TrendingUp, Clock, MapPin, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Users, Calendar, AlertCircle, DollarSign, TrendingUp, Clock, MapPin, AlertTriangle, CheckCircle, PlayCircle } from 'lucide-react';
 import { Status, Appointment, InventoryItem } from '../types';
 
-const DashboardView: React.FC = () => {
+interface DashboardViewProps {
+    onNavigateToAppointment?: (id: string) => void;
+}
+
+const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToAppointment }) => {
   const [loading, setLoading] = useState(true);
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
   const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
+  const [activeJob, setActiveJob] = useState<Appointment | null>(null);
   
   const [stats, setStats] = useState({
     weekEarnings: 0,
@@ -35,6 +40,13 @@ const DashboardView: React.FC = () => {
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
       endOfWeek.setHours(23, 59, 59, 999);
+
+      // 0. Find Active Job
+      const running = appointments.find(a => 
+          (a.status === Status.Active && a.jobLog?.startTime) || 
+          (a.jobLog?.startTime && !a.jobLog.endTime)
+      );
+      setActiveJob(running || null);
 
       // 1. Filter Today's Appointments
       const todays = appointments.filter(a => a.date === todayStr).sort((a, b) => a.time.localeCompare(b.time));
@@ -87,6 +99,27 @@ const DashboardView: React.FC = () => {
     <div className="p-6 max-w-7xl mx-auto">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h2>
       
+      {/* ACTIVE JOB WIDGET */}
+      {activeJob && (
+          <div className="bg-gradient-to-r from-primary-600 to-primary-800 rounded-xl shadow-lg p-6 mb-8 text-white flex flex-col md:flex-row items-center justify-between animate-pulse-slow">
+              <div className="flex items-center gap-4 mb-4 md:mb-0">
+                  <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+                      <PlayCircle size={32} className="text-white animate-pulse" />
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-lg">Job In Progress: {activeJob.clientName}</h3>
+                      <p className="text-primary-100 text-sm">Started at {new Date(activeJob.jobLog!.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                  </div>
+              </div>
+              <button 
+                onClick={() => onNavigateToAppointment?.(activeJob.id)}
+                className="bg-white text-primary-700 font-bold py-2 px-6 rounded-lg shadow hover:bg-gray-50 transition-colors"
+              >
+                  Go to Job Timer
+              </button>
+          </div>
+      )}
+
       {/* Financial Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         

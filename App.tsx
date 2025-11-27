@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
+  const [targetAppointmentId, setTargetAppointmentId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleLoginSuccess = async (token: string) => {
@@ -37,9 +38,21 @@ const App: React.FC = () => {
 
   const renderView = () => {
     switch (currentView) {
-      case 'DASHBOARD': return <DashboardView />;
+      case 'DASHBOARD': return (
+        <DashboardView 
+          onNavigateToAppointment={(id) => {
+            setTargetAppointmentId(id);
+            setCurrentView('APPOINTMENTS');
+          }}
+        />
+      );
       case 'CLIENTS': return <ClientsView />;
-      case 'APPOINTMENTS': return <AppointmentsView />;
+      case 'APPOINTMENTS': return (
+        <AppointmentsView 
+          initialAppointmentId={targetAppointmentId}
+          onClearInitialAppointment={() => setTargetAppointmentId(null)}
+        />
+      );
       case 'INVOICES': return <InvoicesView />;
       case 'INVENTORY': return <InventoryView />;
       case 'SETTINGS': return <SettingsView />;
