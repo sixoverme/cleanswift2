@@ -35,7 +35,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+        scope: 'https://www.googleapis.com/auth/drive.file',
         callback: (response: any) => {
           if (response.access_token) {
             onLoginSuccess(response.access_token);
