@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      base: '/cleanswift2/',   // <-- REQUIRED FOR GITHUB PAGES
+      base: process.env.NETLIFY ? '/' : '/cleanswift2/',
       server: {
         port: 3000,
         host: '0.0.0.0',
