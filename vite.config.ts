@@ -4,8 +4,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // Netlify sets NETLIFY=true, GitHub Actions sets GITHUB_ACTIONS=true
+    const isNetlify = process.env.NETLIFY === 'true' || env.NETLIFY === 'true';
+    const base = isNetlify ? '/' : '/cleanswift2/';
+
+    console.log(`--- Build Environment: ${isNetlify ? 'Netlify' : 'Other'} ---`);
+    console.log(`--- Base Path: ${base} ---`);
+
     return {
-      base: '/cleanswift2/',   // <-- REQUIRED FOR GITHUB PAGES
+      base: base,
       server: {
         port: 3000,
         host: '0.0.0.0',
