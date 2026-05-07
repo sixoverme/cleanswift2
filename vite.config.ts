@@ -4,12 +4,18 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
-    // Netlify sets NETLIFY=true, GitHub Actions sets GITHUB_ACTIONS=true
-    const isNetlify = process.env.NETLIFY === 'true' || env.NETLIFY === 'true';
-    const base = isNetlify ? '/' : '/cleanswift2/';
 
-    console.log(`--- Build Environment: ${isNetlify ? 'Netlify' : 'Other'} ---`);
-    console.log(`--- Base Path: ${base} ---`);
+    // Invert logic: Default to root (Netlify, Local, most hosts)
+    // Only use subpath for GitHub Actions
+    const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
+    const base = isGitHubActions ? '/cleanswift2/' : '/';
+
+    console.log('--- Vite Build Info ---');
+    console.log('Mode:', mode);
+    console.log('Base Path:', base);
+    console.log('Is GitHub Actions:', isGitHubActions);
+    console.log('Is Netlify (Reserved Env):', process.env.NETLIFY);
+    console.log('-----------------------');
 
     return {
       base: base,
