@@ -4,8 +4,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // Dynamically set base path: GitHub Pages needs the subfolder, Netlify needs root.
+    const base = process.env.GITHUB_ACTIONS === 'true' ? '/cleanswift2/' : '/';
+
     return {
-      base: '/cleanswift2/',   // <-- REQUIRED FOR GITHUB PAGES
+      base,
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -21,7 +24,7 @@ export default defineConfig(({ mode }) => {
         }
       },
       build: {
-        outDir: 'docs',
+        outDir: 'dist',
         emptyOutDir: true,
       }
     };
