@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Shield, Layout, Loader2, CheckCircle, Database, Calendar, Users, ArrowRight, Zap, Lock } from 'lucide-react';
+import { X, Check, Users, Calendar, ClipboardList, Receipt, Clock, Package, Shield, Loader2 } from 'lucide-react';
 
-// TODO: PASTE YOUR GOOGLE CLIENT ID HERE
 const GOOGLE_CLIENT_ID = "339121394936-rguue4bt22dau41ldkj0kipt9fodggm3.apps.googleusercontent.com";
+const STRIPE_LINK = "https://buy.stripe.com/dRmbJ17vQ3uxakg0slgbm00";
 
 declare global {
   interface Window {
@@ -39,7 +39,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
           } else {
             setIsLoading(false);
             if (response.error) {
-               setError(`Login error: ${response.error}`);
+              setError(`Login error: ${response.error}`);
             }
           }
         },
@@ -52,190 +52,194 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
     }
   };
 
-  const FeatureCard = ({ icon: Icon, title, description }: { icon: any, title: string, description: string }) => (
-    <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-      <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center text-primary-600 mb-6">
-        <Icon size={24} />
-      </div>
-      <h3 className="text-xl font-bold text-gray-900 mb-3">{title}</h3>
-      <p className="text-gray-600 leading-relaxed">{description}</p>
-    </div>
-  );
+  const badColStyle: React.CSSProperties = { padding: '20px', borderRadius: '12px', background: '#ffffff', border: '1px solid #e5e7eb' };
+  const badLabelStyle: React.CSSProperties = { fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '12px', color: '#94a3b8' };
+  const listStyle: React.CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
+  const badItemStyle: React.CSSProperties = { fontSize: '13px', lineHeight: 1.5, padding: '6px 0', display: 'flex', gap: '10px', alignItems: 'flex-start', color: '#475569' };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2">
-              <div className="bg-primary-600 p-1.5 rounded-lg">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold tracking-tight text-gray-900">CleanSwift</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={onDemoMode}
-                className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
-              >
-                Try Demo
-              </button>
-              <button 
-                onClick={() => document.getElementById('login-section')?.scrollIntoView({ behavior: 'smooth' })}
-                className="bg-primary-600 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-primary-700 transition-colors shadow-sm"
-              >
-                Sign In
-              </button>
-            </div>
-          </div>
+    <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", background: '#ffffff' }}>
+
+      {/* Nav */}
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', background: '#ffffff', borderBottom: '0.5px solid #f3f4f6' }}>
+        <svg width="180" height="36" viewBox="0 0 240 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="CleanSwift">
+          <path d="M24 44s16-8 16-20V10l-16-6-16 6v14c0 12 16 20 16 20z" stroke="#0284c7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="#0284c7" fillOpacity="0.1"/>
+          <text x="56" y="34" fill="#0f172a" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", fontWeight: 800, fontSize: '28px', letterSpacing: '-0.025em' }}>CleanSwift</text>
+        </svg>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button onClick={onDemoMode} style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px', borderRadius: '999px' }}>
+            Try demo
+          </button>
+          <button onClick={() => window.open(STRIPE_LINK, '_blank')} style={{ fontSize: '13px', fontWeight: 600, background: '#0284c7', color: '#fff', border: 'none', borderRadius: '999px', padding: '9px 18px', cursor: 'pointer' }}>
+            Subscribe
+          </button>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 bg-primary-50 text-primary-700 px-4 py-1.5 rounded-full text-sm font-medium mb-8">
-            <Zap size={14} className="fill-current" />
-            <span>Built for Modern Service Professionals</span>
-          </div>
-          <h1 className="text-5xl sm:text-7xl font-extrabold text-gray-900 tracking-tight mb-8">
-            Your Business, <span className="text-primary-600">Powered by Data.</span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-2xl mx-auto">
-            CleanSwift transforms your Google Sheets into a professional management suite. No black-box databases. Just your data, your way.
+      {/* Hero */}
+      <div style={{ padding: '52px 32px 44px', background: '#ffffff' }}>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <p style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#0369a1', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '16px', fontWeight: 600, background: '#e0f2fe', padding: '5px 12px', borderRadius: '999px' }}>
+            Built by cleaners · for cleaners
           </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <button 
-              onClick={() => document.getElementById('login-section')?.scrollIntoView({ behavior: 'smooth' })}
-              className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-bold text-lg hover:bg-primary-700 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
-            >
-              Get Started for Free <ArrowRight size={20} />
+          <h1 style={{ fontSize: '40px', fontWeight: 600, color: '#0f172a', margin: '0 0 16px', lineHeight: 1.1, letterSpacing: '-0.025em' }}>
+            Finally, an app that{' '}
+            <span style={{ background: 'linear-gradient(180deg, transparent 62%, #bae6fd 62%)', padding: '0 3px' }}>actually gets</span>
+            {' '}how a cleaning business runs.
+          </h1>
+          <p style={{ fontSize: '16px', color: '#475569', margin: '0 0 24px', lineHeight: 1.55, maxWidth: '560px' }}>
+            Not a marketplace skimming your jobs. Not a calendar pretending to be a business tool. Just the full workflow — built by people who've actually done the work.
+          </p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={() => window.open(STRIPE_LINK, '_blank')} style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '10px', padding: '13px 22px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              Subscribe — $19.92/mo
             </button>
-            <button 
-              onClick={onDemoMode}
-              className="px-8 py-4 bg-white text-gray-900 border-2 border-gray-200 rounded-2xl font-bold text-lg hover:border-primary-600 hover:text-primary-600 transition-all flex items-center justify-center gap-2"
-            >
-              Explore Demo <Layout size={20} />
+            <button onClick={onDemoMode} style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '13px 22px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              Try the demo
             </button>
           </div>
+          <p style={{ fontSize: '12px', color: '#64748b', marginTop: '14px' }}>Cancel anytime.</p>
         </div>
-      </section>
+      </div>
 
-      {/* Social Proof/Trust Section */}
-      <section className="py-12 bg-gray-50 border-y border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-center gap-8 md:gap-16 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-          <div className="flex items-center gap-2 font-bold text-xl"><Database size={24} /> Google Sheets</div>
-          <div className="flex items-center gap-2 font-bold text-xl"><Shield size={24} /> Privacy First</div>
-          <div className="flex items-center gap-2 font-bold text-xl"><Zap size={24} /> Direct Sync</div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Everything You Need to Scale</h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">Focus on your craft, we'll handle the logistics with a suite designed for reliability and speed.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          <FeatureCard 
-            icon={Users}
-            title="Intelligent CRM"
-            description="Track clients, locations, and specialized notes for children and pets. Keep every detail of your service personalized."
-          />
-          <FeatureCard 
-            icon={Calendar}
-            title="Smart Scheduling"
-            description="One-off or recurring appointments with conflict checking. View your upcoming week with clarity."
-          />
-          <FeatureCard 
-            icon={CheckCircle}
-            title="Interactive Checklists"
-            description="Ensure quality control with per-job checklists. Your high standards, documented every time."
-          />
-          <FeatureCard 
-            icon={Shield}
-            title="Professional Invoicing"
-            description="Generate branded invoices instantly based on job rates and hours. Track payment status with zero effort."
-          />
-          <FeatureCard 
-            icon={Database}
-            title="Inventory Management"
-            description="Monitor supplies and get low-stock alerts. Never run out of essentials in the middle of a job."
-          />
-          <FeatureCard 
-            icon={Lock}
-            title="Data Sovereignty"
-            description="Your data lives in your Google Drive. We don't lock your business records behind a proprietary server."
-          />
-        </div>
-      </section>
-
-      {/* Login Section */}
-      <section id="login-section" className="py-24 px-4 bg-gray-900 text-white overflow-hidden relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="max-w-md mx-auto relative z-10">
-          <div className="bg-white rounded-3xl p-8 text-gray-900 shadow-2xl">
-            <div className="text-center mb-8">
-              <h3 className="text-2xl font-bold mb-2">Ready to Start?</h3>
-              <p className="text-gray-500 text-sm">Sign in with Google to sync your management suite.</p>
+      {/* Comparison */}
+      <div style={{ padding: '48px 32px', background: '#f8fafc', borderTop: '0.5px solid #e5e7eb', borderBottom: '0.5px solid #e5e7eb' }}>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 600, color: '#0f172a', margin: '0 0 24px', lineHeight: 1.3, letterSpacing: '-0.015em' }}>
+            Every other "cleaner app" is one of two things:
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={badColStyle}>
+              <p style={badLabelStyle}>The marketplace</p>
+              <ul style={listStyle}>
+                {['Takes a cut of every job', 'Owns the customer relationship', 'Sets your prices for you', "You're the middleman in your own business"].map(text => (
+                  <li key={text} style={badItemStyle}>
+                    <X size={15} style={{ color: '#cbd5e1', marginTop: '1px', flexShrink: 0 }} />
+                    <span>{text}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
+            <div style={badColStyle}>
+              <p style={badLabelStyle}>The "simple" app</p>
+              <ul style={listStyle}>
+                {['A calendar with a name', 'No real invoicing', 'No supply tracking, no checklists', "Built by people who've never cleaned"].map(text => (
+                  <li key={text} style={badItemStyle}>
+                    <X size={15} style={{ color: '#cbd5e1', marginTop: '1px', flexShrink: 0 }} />
+                    <span>{text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div style={{ padding: '20px', borderRadius: '12px', background: '#0c4a6e', color: '#fff', marginTop: '12px' }}>
+            <p style={{ fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '12px', color: '#7dd3fc' }}>CleanSwift</p>
+            <ul style={listStyle}>
+              {[
+                'Your customers. Your pricing. Your relationship.',
+                'The whole workflow: clients, scheduling, invoicing, checklists, inventory, time tracking',
+                'Built by people who run cleaning businesses',
+                'One flat price. No commissions, ever.',
+              ].map(text => (
+                <li key={text} style={{ fontSize: '13px', lineHeight: 1.5, padding: '6px 0', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <Check size={15} style={{ color: '#38bdf8', marginTop: '1px', flexShrink: 0 }} />
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
 
-            {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl text-center font-medium">
-                {error}
+      {/* Features */}
+      <div style={{ padding: '56px 32px', background: '#ffffff' }}>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <p style={{ fontSize: '11px', color: '#0369a1', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 8px', fontWeight: 600 }}>
+            The actual stuff you'll use
+          </p>
+          <h2 style={{ fontSize: '24px', fontWeight: 600, color: '#0f172a', margin: '0 0 28px', lineHeight: 1.25, letterSpacing: '-0.02em' }}>
+            Every little thing a cleaning day throws at you — handled.
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {[
+              { Icon: Users,         title: 'Client details that actually matter',   desc: "Gate codes, alarm codes, where the dog hides, what the kids are allergic to, which rooms to skip. All your notes and everything in your head, finally in one place." },
+              { Icon: Calendar,      title: "Recurring schedules that don't break",  desc: "Weekly, biweekly, every-third-Tuesday — set it once. The app keeps the week organized so you don't have to." },
+              { Icon: ClipboardList, title: 'Per-client checklists',                 desc: "Every house is different. Save the exact list for each client so the job's the same whether you remember every detail or not." },
+              { Icon: Receipt,       title: 'Invoices that send themselves',         desc: "Finish a job, hit a button, invoice goes out. Branded with your name, calculated from your rate, paid faster." },
+              { Icon: Clock,         title: 'Real time tracking',                    desc: "How long jobs actually take vs. what you charged. Find out which clients pay you fairly — and which ones don't." },
+              { Icon: Package,       title: 'Supply tracking with low-stock alerts', desc: `Know what's in the van before you leave the driveway. No more "I thought I had another bottle of that."` },
+            ].map(({ Icon, title, desc }) => (
+              <div key={title} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7', flexShrink: 0 }}>
+                  <Icon size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}>{title}</h3>
+                  <p style={{ fontSize: '13px', color: '#475569', margin: 0, lineHeight: 1.55 }}>{desc}</p>
+                </div>
               </div>
-            )}
-
-            <button
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
-              className="w-full group relative flex justify-center items-center gap-3 py-4 px-4 border border-gray-200 rounded-2xl bg-white text-gray-700 font-bold hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all shadow-sm active:scale-[0.98]"
-            >
-               {isLoading ? (
-                 <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
-               ) : (
-                 <>
-                   <img src="https://www.google.com/favicon.ico" alt="G" className="w-5 h-5" />
-                   <span>Sign in with Google</span>
-                 </>
-               )}
-            </button>
-
-            <div className="mt-6 flex flex-col gap-4">
-              <p className="text-[11px] text-gray-400 text-center px-4">
-                By signing in, you agree to our 
-                <a href="/terms.html" className="text-primary-600 hover:underline mx-1">Terms</a> 
-                and 
-                <a href="/privacy.html" className="text-primary-600 hover:underline mx-1">Privacy Policy</a>.
-              </p>
-              <div className="h-px bg-gray-100 w-full"></div>
-              <button 
-                onClick={onDemoMode}
-                className="text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2"
-              >
-                <Layout size={14} /> Try the Demo Environment
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      </section>
+      </div>
+
+      {/* Bottom CTA */}
+      <div style={{ padding: '56px 32px', background: '#0f172a', color: '#fff', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '28px', fontWeight: 600, margin: '0 0 12px', lineHeight: 1.25, letterSpacing: '-0.02em', maxWidth: '480px', marginLeft: 'auto', marginRight: 'auto' }}>
+          We built this for ourselves. Now it's yours too.
+        </h2>
+        <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 22px' }}>
+          $19.92 a month. Cancel anytime. Nothing between you and your customers.
+        </p>
+        <button onClick={() => window.open(STRIPE_LINK, '_blank')} style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '999px', padding: '14px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+          Subscribe now
+        </button>
+        <p style={{ fontSize: '12px', color: '#64748b', marginTop: '22px' }}>
+          <button onClick={onDemoMode} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12px', cursor: 'pointer', padding: 0 }}>
+            Or try the demo — no signup needed.
+          </button>
+        </p>
+      </div>
+
+      {/* Sign in */}
+      <div style={{ padding: '24px', textAlign: 'center', background: '#ffffff', borderTop: '0.5px solid #f3f4f6' }}>
+        <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 10px' }}>Already a subscriber?</p>
+        {error && (
+          <p style={{ fontSize: '12px', color: '#dc2626', margin: '0 0 10px' }}>{error}</p>
+        )}
+        <button
+          onClick={handleGoogleLogin}
+          disabled={isLoading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#ffffff', color: '#0f172a', fontSize: '13px', fontWeight: 500, cursor: isLoading ? 'default' : 'pointer' }}
+        >
+          {isLoading
+            ? <Loader2 size={14} className="animate-spin" />
+            : <img src="https://www.google.com/favicon.ico" width="14" height="14" alt="" />
+          }
+          Sign in with Google
+        </button>
+        <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '12px' }}>
+          By signing in, you agree to our{' '}
+          <a href="/terms.html" style={{ color: '#0284c7' }}>Terms</a>
+          {' '}and{' '}
+          <a href="/privacy.html" style={{ color: '#0284c7' }}>Privacy Policy</a>.
+        </p>
+      </div>
 
       {/* Footer */}
-      <footer className="bg-white py-12 px-4 border-t border-gray-100">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-primary-600" />
-            <span className="font-bold text-gray-900">CleanSwift</span>
-          </div>
-          <div className="flex gap-8">
-            <a href="/privacy.html" className="text-sm text-gray-500 hover:text-primary-600">Privacy</a>
-            <a href="/terms.html" className="text-sm text-gray-500 hover:text-primary-600">Terms</a>
-            <a href="mailto:daniel@sociomagicka.com" className="text-sm text-gray-500 hover:text-primary-600">Support</a>
-          </div>
-          <p className="text-sm text-gray-400">&copy; 2026 CleanSwift. All rights reserved.</p>
+      <footer style={{ background: '#ffffff', borderTop: '0.5px solid #f3f4f6', padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+          <Shield size={18} style={{ color: '#0284c7' }} />
+          CleanSwift
         </div>
+        <div style={{ display: 'flex', gap: '28px' }}>
+          <a href="/privacy.html" style={{ fontSize: '13px', color: '#64748b', textDecoration: 'none' }}>Privacy</a>
+          <a href="/terms.html" style={{ fontSize: '13px', color: '#64748b', textDecoration: 'none' }}>Terms</a>
+          <a href="mailto:daniel@sociomagicka.com" style={{ fontSize: '13px', color: '#64748b', textDecoration: 'none' }}>Support</a>
+        </div>
+        <p style={{ fontSize: '12px', color: '#94a3b8' }}>© 2026 CleanSwift. All rights reserved.</p>
       </footer>
+
     </div>
   );
 };

@@ -9,37 +9,58 @@ import SettingsView from './views/SettingsView';
 import WelcomeScreen from './components/WelcomeScreen';
 import { db } from './services/mockData';
 import { ViewState } from './types';
-import { Menu, Loader2 } from 'lucide-react';
+import { Menu, Loader2, Shield } from 'lucide-react';
+
+const STRIPE_LINK = "https://buy.stripe.com/dRmbJ17vQ3uxakg0slgbm00";
+
+type AppState = 'WELCOME' | 'CHECKING_SUB' | 'INITIALIZING' | 'SUBSCRIPTION_REQUIRED' | 'AUTHENTICATED';
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(false);
+  const [appState, setAppState] = useState<AppState>('WELCOME');
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [targetAppointmentId, setTargetAppointmentId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleLoginSuccess = async (token: string) => {
-    setIsInitializing(true);
+    setAppState('CHECKING_SUB');
+    try {
+      const res = await fetch('/.netlify/functions/check-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+
+      if (!data.isSubscribed) {
+        setAppState('SUBSCRIPTION_REQUIRED');
+        return;
+      }
+    } catch (err) {
+      console.error('Subscription check failed:', err);
+      setAppState('SUBSCRIPTION_REQUIRED');
+      return;
+    }
+
+    setAppState('INITIALIZING');
     try {
       await db.initGoogleMode(token);
-      setIsAuthenticated(true);
+      setAppState('AUTHENTICATED');
     } catch (error) {
       console.error("Failed to initialize DB:", error);
       alert("Failed to connect to Google Sheets. Please try again.");
-    } finally {
-      setIsInitializing(false);
+      setAppState('WELCOME');
     }
   };
 
   const handleDemoMode = () => {
     db.setMockMode();
-    setIsAuthenticated(true);
+    setAppState('AUTHENTICATED');
   };
 
   const renderView = () => {
     switch (currentView) {
       case 'DASHBOARD': return (
-        <DashboardView 
+        <DashboardView
           onNavigateToAppointment={(id) => {
             setTargetAppointmentId(id);
             setCurrentView('APPOINTMENTS');
@@ -48,7 +69,7 @@ const App: React.FC = () => {
       );
       case 'CLIENTS': return <ClientsView />;
       case 'APPOINTMENTS': return (
-        <AppointmentsView 
+        <AppointmentsView
           initialAppointmentId={targetAppointmentId}
           onClearInitialAppointment={() => setTargetAppointmentId(null)}
         />
@@ -60,24 +81,67 @@ const App: React.FC = () => {
     }
   };
 
-  if (!isAuthenticated) {
-    if (isInitializing) {
-      return (
-        <div className="h-screen flex flex-col items-center justify-center bg-gray-50 text-primary-600 gap-4">
-           <Loader2 className="w-12 h-12 animate-spin" />
-           <p className="text-gray-600 font-medium">Connecting to Google Sheets...</p>
-           <p className="text-xs text-gray-400">Setting up your CleanSwift dashboard.</p>
+  if (appState === 'CHECKING_SUB') {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gray-50 text-primary-600 gap-4">
+        <Loader2 className="w-12 h-12 animate-spin" />
+        <p className="text-gray-600 font-medium">Checking subscription...</p>
+      </div>
+    );
+  }
+
+  if (appState === 'INITIALIZING') {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gray-50 text-primary-600 gap-4">
+        <Loader2 className="w-12 h-12 animate-spin" />
+        <p className="text-gray-600 font-medium">Connecting to Google Sheets...</p>
+        <p className="text-xs text-gray-400">Setting up your CleanSwift dashboard.</p>
+      </div>
+    );
+  }
+
+  if (appState === 'SUBSCRIPTION_REQUIRED') {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+        <div style={{ background: '#ffffff', borderRadius: '16px', border: '0.5px solid #e5e7eb', padding: '48px 40px', maxWidth: '420px', width: '100%', textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '32px' }}>
+            <Shield size={20} style={{ color: '#0284c7' }} />
+            <span style={{ fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>CleanSwift</span>
+          </div>
+          <h1 style={{ fontSize: '22px', fontWeight: 600, color: '#0f172a', margin: '0 0 12px', lineHeight: 1.25 }}>
+            Subscription required
+          </h1>
+          <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 32px', lineHeight: 1.6 }}>
+            CleanSwift is $19.92/month — one flat price, no commissions, cancel anytime.
+          </p>
+          <a
+            href={STRIPE_LINK}
+            target="_blank"
+            rel="noreferrer"
+            style={{ display: 'block', background: '#0284c7', color: '#fff', borderRadius: '999px', padding: '13px 24px', fontSize: '14px', fontWeight: 600, textDecoration: 'none', marginBottom: '16px' }}
+          >
+            Subscribe now
+          </a>
+          <button
+            onClick={() => setAppState('WELCOME')}
+            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '13px', cursor: 'pointer', padding: 0 }}
+          >
+            Already subscribed? Sign in again
+          </button>
         </div>
-      );
-    }
+      </div>
+    );
+  }
+
+  if (appState === 'WELCOME') {
     return <WelcomeScreen onLoginSuccess={handleLoginSuccess} onDemoMode={handleDemoMode} />;
   }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar 
-        currentView={currentView} 
-        onChangeView={setCurrentView} 
+      <Sidebar
+        currentView={currentView}
+        onChangeView={setCurrentView}
         isOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
@@ -85,7 +149,7 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
         <header className="bg-white border-b border-gray-200 lg:hidden flex items-center p-4">
-          <button 
+          <button
             onClick={() => setIsSidebarOpen(true)}
             className="text-gray-500 hover:text-gray-700 focus:outline-none"
           >
