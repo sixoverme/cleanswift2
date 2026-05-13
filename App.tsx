@@ -27,7 +27,7 @@ const App: React.FC = () => {
       const res = await fetch('/.netlify/functions/check-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ accessToken: token }),
       });
       const data = await res.json();
 
