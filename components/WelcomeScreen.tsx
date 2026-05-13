@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { X, Check, Users, Calendar, ClipboardList, Receipt, Clock, Package, Shield, Loader2 } from 'lucide-react';
 
 const GOOGLE_CLIENT_ID = "339121394936-rguue4bt22dau41ldkj0kipt9fodggm3.apps.googleusercontent.com";
-const STRIPE_LINK = "https://buy.stripe.com/dRmbJ17vQ3uxakg0slgbm00";
 
 declare global {
   interface Window {
@@ -70,7 +69,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
           <button onClick={onDemoMode} style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px', borderRadius: '999px' }}>
             Try demo
           </button>
-          <button onClick={() => window.open(STRIPE_LINK, '_blank')} style={{ fontSize: '13px', fontWeight: 600, background: '#0284c7', color: '#fff', border: 'none', borderRadius: '999px', padding: '9px 18px', cursor: 'pointer' }}>
+          <button onClick={handleGoogleLogin} style={{ fontSize: '13px', fontWeight: 600, background: '#0284c7', color: '#fff', border: 'none', borderRadius: '999px', padding: '9px 18px', cursor: 'pointer' }}>
             Subscribe
           </button>
         </div>
@@ -91,7 +90,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
             Not a marketplace skimming your jobs. Not a calendar pretending to be a business tool. Just the full workflow — built by people who've actually done the work.
           </p>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={() => window.open(STRIPE_LINK, '_blank')} style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '10px', padding: '13px 22px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <button onClick={handleGoogleLogin} style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '10px', padding: '13px 22px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               Subscribe — $19.92/mo
             </button>
             <button onClick={onDemoMode} style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '13px 22px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -191,7 +190,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
         <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 22px' }}>
           $19.92 a month. Cancel anytime. Nothing between you and your customers.
         </p>
-        <button onClick={() => window.open(STRIPE_LINK, '_blank')} style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '999px', padding: '14px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={handleGoogleLogin} style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '999px', padding: '14px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
           Subscribe now
         </button>
         <p style={{ fontSize: '12px', color: '#64748b', marginTop: '22px' }}>

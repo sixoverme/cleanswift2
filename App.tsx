@@ -17,6 +17,7 @@ type AppState = 'WELCOME' | 'CHECKING_SUB' | 'INITIALIZING' | 'SUBSCRIPTION_REQU
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('WELCOME');
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [targetAppointmentId, setTargetAppointmentId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -32,6 +33,7 @@ const App: React.FC = () => {
       const data = await res.json();
 
       if (!data.isSubscribed) {
+        setUserEmail(data.email ?? null);
         setAppState('SUBSCRIPTION_REQUIRED');
         return;
       }
@@ -115,7 +117,7 @@ const App: React.FC = () => {
             CleanSwift is $19.92/month — one flat price, no commissions, cancel anytime.
           </p>
           <a
-            href={STRIPE_LINK}
+            href={userEmail ? `${STRIPE_LINK}?prefilled_email=${encodeURIComponent(userEmail)}` : STRIPE_LINK}
             target="_blank"
             rel="noreferrer"
             style={{ display: 'block', background: '#0284c7', color: '#fff', borderRadius: '999px', padding: '13px 24px', fontSize: '14px', fontWeight: 600, textDecoration: 'none', marginBottom: '16px' }}

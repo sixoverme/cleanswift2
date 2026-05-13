@@ -61,6 +61,7 @@ export const handler: Handler = async (event) => {
     body: JSON.stringify({
       isSubscribed,
       status: data?.status ?? null,
+      email,
     }),
   };
 };
