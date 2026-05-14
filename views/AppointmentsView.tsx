@@ -175,22 +175,23 @@ const AppointmentsView: React.FC<{initialAppointmentId?: string | null, onClearI
 
   const handleStopRecurring = async () => {
       if (!selectedAppt || !selectedAppt.seriesId) return;
-      
-      if (confirm('Take this client off rotation? This will delete this appointment and all future recurring appointments in this series.')) {
+
+      const futureAppts = appointments.filter(a =>
+          a.seriesId === selectedAppt.seriesId &&
+          a.clientId === selectedAppt.clientId &&
+          (a.date > selectedAppt.date || (a.date === selectedAppt.date && a.time >= selectedAppt.time))
+      );
+
+      if (futureAppts.length === 0) {
+          alert('No future appointments found in this series.');
+          return;
+      }
+
+      if (confirm(`Take ${selectedAppt.clientName} off rotation? This will delete ${futureAppts.length} appointment(s) from this date forward.`)) {
           setLoading(true);
-          // 1. Find all future appointments in this series
-          const futureAppts = appointments.filter(a => 
-              a.seriesId === selectedAppt.seriesId && 
-              (a.date > selectedAppt.date || (a.date === selectedAppt.date && a.time >= selectedAppt.time))
-          );
-          
-          const idsToDelete = futureAppts.map(a => a.id);
-          
-          // 2. Delete them
-          await db.deleteAppointments(idsToDelete);
-          
+          await db.deleteAppointments(futureAppts.map(a => a.id));
           setSelectedAppt(null);
-          fetchData(); // setAppointments will handle the UI update
+          fetchData();
       }
   };
 

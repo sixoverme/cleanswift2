@@ -366,8 +366,9 @@ class MockService implements IDataService {
         this.appointments = this.appointments.filter(x => x.id !== id); 
         this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments);
     }
-    async deleteAppointments(ids: string[]) { 
-        await delay(300); 
+    async deleteAppointments(ids: string[]) {
+        if (ids.length === 0) return;
+        await delay(300);
         this.appointments = this.appointments.filter(x => !ids.includes(x.id));
         this.save(STORAGE_KEYS.APPOINTMENTS, this.appointments);
     }
@@ -861,6 +862,7 @@ class GoogleSheetsService implements IDataService {
         await this.updateSheetData(SHEETS.APPOINTMENTS, this.deserializeAppointment, this.serializeAppointment, items => items.filter(i => i.id !== id));
     }
     async deleteAppointments(ids: string[]) {
+        if (ids.length === 0) return;
         await this.updateSheetData(SHEETS.APPOINTMENTS, this.deserializeAppointment, this.serializeAppointment, items => items.filter(i => !ids.includes(i.id)));
     }
 
