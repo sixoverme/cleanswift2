@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import DashboardView from './views/DashboardView';
 import ClientsView from './views/ClientsView';
@@ -12,15 +12,71 @@ import { ViewState } from './types';
 import { Menu, Loader2, Shield } from 'lucide-react';
 
 const STRIPE_LINK = "https://buy.stripe.com/dRmbJ17vQ3uxakg0slgbm00";
+const GOOGLE_CLIENT_ID = "339121394936-rguue4bt22dau41ldkj0kipt9fodggm3.apps.googleusercontent.com";
+const LOGIN_HINT_KEY = 'cleanswift_login_hint';
 
-type AppState = 'WELCOME' | 'CHECKING_SUB' | 'INITIALIZING' | 'SUBSCRIPTION_REQUIRED' | 'AUTHENTICATED';
+type AppState = 'SILENT_AUTH' | 'WELCOME' | 'CHECKING_SUB' | 'INITIALIZING' | 'SUBSCRIPTION_REQUIRED' | 'AUTHENTICATED';
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>('WELCOME');
+  const [appState, setAppState] = useState<AppState>('SILENT_AUTH');
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [targetAppointmentId, setTargetAppointmentId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const hint = localStorage.getItem(LOGIN_HINT_KEY);
+    if (!hint) {
+      setAppState('WELCOME');
+      return;
+    }
+
+    let cancelled = false;
+
+    const attempt = () => {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file email profile',
+        hint,
+        callback: (response: any) => {
+          if (cancelled) return;
+          if (response.access_token) {
+            handleLoginSuccess(response.access_token);
+          } else {
+            setAppState('WELCOME');
+          }
+        },
+        error_callback: () => {
+          if (!cancelled) setAppState('WELCOME');
+        },
+      });
+      client.requestAccessToken({ prompt: '' });
+    };
+
+    if (window.google?.accounts) {
+      attempt();
+      return;
+    }
+
+    const poll = setInterval(() => {
+      if (window.google?.accounts) {
+        clearInterval(poll);
+        clearTimeout(giveUp);
+        if (!cancelled) attempt();
+      }
+    }, 50);
+
+    const giveUp = setTimeout(() => {
+      clearInterval(poll);
+      if (!cancelled) setAppState('WELCOME');
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      clearTimeout(giveUp);
+    };
+  }, []);
 
   const handleLoginSuccess = async (token: string) => {
     setAppState('CHECKING_SUB');
@@ -36,6 +92,10 @@ const App: React.FC = () => {
         setUserEmail(data.email ?? null);
         setAppState('SUBSCRIPTION_REQUIRED');
         return;
+      }
+
+      if (data.email) {
+        localStorage.setItem(LOGIN_HINT_KEY, data.email);
       }
     } catch (err) {
       console.error('Subscription check failed:', err);
@@ -82,6 +142,14 @@ const App: React.FC = () => {
       default: return <DashboardView />;
     }
   };
+
+  if (appState === 'SILENT_AUTH') {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    );
+  }
 
   if (appState === 'CHECKING_SUB') {
     return (
