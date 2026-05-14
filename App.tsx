@@ -44,6 +44,12 @@ const App: React.FC = () => {
       });
       const data = await res.json();
 
+      if (!res.ok) {
+        console.error('auth-login error:', data);
+        setAppState('WELCOME');
+        return;
+      }
+
       if (!data.isSubscribed) {
         setUserEmail(data.email ?? null);
         setAppState('SUBSCRIPTION_REQUIRED');
