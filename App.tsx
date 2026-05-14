@@ -12,8 +12,9 @@ import { ViewState } from './types';
 import { Menu, Loader2, Shield } from 'lucide-react';
 
 const STRIPE_LINK = "https://buy.stripe.com/dRmbJ17vQ3uxakg0slgbm00";
-const GOOGLE_CLIENT_ID = "339121394936-rguue4bt22dau41ldkj0kipt9fodggm3.apps.googleusercontent.com";
-const LOGIN_HINT_KEY = 'cleanswift_login_hint';
+const TOKEN_KEY = 'cleanswift_token';
+const TOKEN_TS_KEY = 'cleanswift_token_ts';
+const TOKEN_TTL = 55 * 60 * 1000;
 
 type AppState = 'SILENT_AUTH' | 'WELCOME' | 'CHECKING_SUB' | 'INITIALIZING' | 'SUBSCRIPTION_REQUIRED' | 'AUTHENTICATED';
 
@@ -25,57 +26,23 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const hint = localStorage.getItem(LOGIN_HINT_KEY);
-    if (!hint) {
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    const ts = parseInt(sessionStorage.getItem(TOKEN_TS_KEY) ?? '0');
+
+    if (token && Date.now() - ts < TOKEN_TTL) {
+      setAppState('INITIALIZING');
+      db.initGoogleMode(token)
+        .then(() => setAppState('AUTHENTICATED'))
+        .catch(() => {
+          sessionStorage.removeItem(TOKEN_KEY);
+          sessionStorage.removeItem(TOKEN_TS_KEY);
+          setAppState('WELCOME');
+        });
+    } else {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_TS_KEY);
       setAppState('WELCOME');
-      return;
     }
-
-    let cancelled = false;
-
-    const attempt = () => {
-      const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/drive.file email profile',
-        hint,
-        callback: (response: any) => {
-          if (cancelled) return;
-          if (response.access_token) {
-            handleLoginSuccess(response.access_token);
-          } else {
-            setAppState('WELCOME');
-          }
-        },
-        error_callback: () => {
-          if (!cancelled) setAppState('WELCOME');
-        },
-      });
-      client.requestAccessToken({ prompt: '' });
-    };
-
-    if (window.google?.accounts) {
-      attempt();
-      return;
-    }
-
-    const poll = setInterval(() => {
-      if (window.google?.accounts) {
-        clearInterval(poll);
-        clearTimeout(giveUp);
-        if (!cancelled) attempt();
-      }
-    }, 50);
-
-    const giveUp = setTimeout(() => {
-      clearInterval(poll);
-      if (!cancelled) setAppState('WELCOME');
-    }, 5000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-      clearTimeout(giveUp);
-    };
   }, []);
 
   const handleLoginSuccess = async (token: string) => {
@@ -94,9 +61,6 @@ const App: React.FC = () => {
         return;
       }
 
-      if (data.email) {
-        localStorage.setItem(LOGIN_HINT_KEY, data.email);
-      }
     } catch (err) {
       console.error('Subscription check failed:', err);
       setAppState('SUBSCRIPTION_REQUIRED');
@@ -106,6 +70,8 @@ const App: React.FC = () => {
     setAppState('INITIALIZING');
     try {
       await db.initGoogleMode(token);
+      sessionStorage.setItem(TOKEN_KEY, token);
+      sessionStorage.setItem(TOKEN_TS_KEY, Date.now().toString());
       setAppState('AUTHENTICATED');
     } catch (error) {
       console.error("Failed to initialize DB:", error);
