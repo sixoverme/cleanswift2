@@ -10,11 +10,11 @@ declare global {
 }
 
 interface WelcomeScreenProps {
-  onLoginSuccess: (token: string) => void;
+  onAuthCode: (code: string) => void;
   onDemoMode: () => void;
 }
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMode }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onAuthCode, onDemoMode }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,12 +29,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
     }
 
     try {
-      const client = window.google.accounts.oauth2.initTokenClient({
+      const client = window.google.accounts.oauth2.initCodeClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/drive.file email profile',
+        ux_mode: 'popup',
+        access_type: 'offline',
         callback: (response: any) => {
-          if (response.access_token) {
-            onLoginSuccess(response.access_token);
+          if (response.code) {
+            onAuthCode(response.code);
           } else {
             setIsLoading(false);
             if (response.error) {
@@ -42,8 +44,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess, onDemoMod
             }
           }
         },
+        error_callback: (err: any) => {
+          setIsLoading(false);
+          if (err.type !== 'popup_closed') {
+            setError(`Login error: ${err.type}`);
+          }
+        },
       });
-      client.requestAccessToken();
+      client.requestCode();
     } catch (err) {
       console.error(err);
       setIsLoading(false);

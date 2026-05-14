@@ -12,9 +12,6 @@ import { ViewState } from './types';
 import { Menu, Loader2, Shield } from 'lucide-react';
 
 const STRIPE_LINK = "https://buy.stripe.com/dRmbJ17vQ3uxakg0slgbm00";
-const TOKEN_KEY = 'cleanswift_token';
-const TOKEN_TS_KEY = 'cleanswift_token_ts';
-const TOKEN_TTL = 55 * 60 * 1000;
 
 type AppState = 'SILENT_AUTH' | 'WELCOME' | 'CHECKING_SUB' | 'INITIALIZING' | 'SUBSCRIPTION_REQUIRED' | 'AUTHENTICATED';
 
@@ -26,32 +23,24 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const token = sessionStorage.getItem(TOKEN_KEY);
-    const ts = parseInt(sessionStorage.getItem(TOKEN_TS_KEY) ?? '0');
-
-    if (token && Date.now() - ts < TOKEN_TTL) {
-      setAppState('INITIALIZING');
-      db.initGoogleMode(token)
-        .then(() => setAppState('AUTHENTICATED'))
-        .catch(() => {
-          sessionStorage.removeItem(TOKEN_KEY);
-          sessionStorage.removeItem(TOKEN_TS_KEY);
-          setAppState('WELCOME');
-        });
-    } else {
-      sessionStorage.removeItem(TOKEN_KEY);
-      sessionStorage.removeItem(TOKEN_TS_KEY);
-      setAppState('WELCOME');
-    }
+    fetch('/.netlify/functions/auth-session')
+      .then(res => res.ok ? res.json() : Promise.reject(res.status))
+      .then(data => {
+        setAppState('INITIALIZING');
+        return db.initGoogleMode(data.accessToken);
+      })
+      .then(() => setAppState('AUTHENTICATED'))
+      .catch(() => setAppState('WELCOME'));
   }, []);
 
-  const handleLoginSuccess = async (token: string) => {
+  const handleAuthCode = async (code: string) => {
     setAppState('CHECKING_SUB');
+    let accessToken: string;
     try {
-      const res = await fetch('/.netlify/functions/check-subscription', {
+      const res = await fetch('/.netlify/functions/auth-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token }),
+        body: JSON.stringify({ code }),
       });
       const data = await res.json();
 
@@ -61,21 +50,20 @@ const App: React.FC = () => {
         return;
       }
 
+      accessToken = data.accessToken;
     } catch (err) {
-      console.error('Subscription check failed:', err);
-      setAppState('SUBSCRIPTION_REQUIRED');
+      console.error('Login failed:', err);
+      setAppState('WELCOME');
       return;
     }
 
     setAppState('INITIALIZING');
     try {
-      await db.initGoogleMode(token);
-      sessionStorage.setItem(TOKEN_KEY, token);
-      sessionStorage.setItem(TOKEN_TS_KEY, Date.now().toString());
+      await db.initGoogleMode(accessToken);
       setAppState('AUTHENTICATED');
     } catch (error) {
-      console.error("Failed to initialize DB:", error);
-      alert("Failed to connect to Google Sheets. Please try again.");
+      console.error('Failed to initialize DB:', error);
+      alert('Failed to connect to Google Sheets. Please try again.');
       setAppState('WELCOME');
     }
   };
@@ -170,7 +158,7 @@ const App: React.FC = () => {
   }
 
   if (appState === 'WELCOME') {
-    return <WelcomeScreen onLoginSuccess={handleLoginSuccess} onDemoMode={handleDemoMode} />;
+    return <WelcomeScreen onAuthCode={handleAuthCode} onDemoMode={handleDemoMode} />;
   }
 
   return (
