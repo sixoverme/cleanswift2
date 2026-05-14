@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, JobType, Invoice, Status, ChecklistTemplate, ChecklistItem } from '../types';
-import { User, MapPin, Plus, Trash2, Save, Upload, Briefcase, DollarSign, Database, RefreshCw, CheckSquare } from 'lucide-react';
+import { User, MapPin, Plus, Trash2, Save, Upload, Briefcase, DollarSign, Database, RefreshCw, CheckSquare, LogOut } from 'lucide-react';
 import { db } from '../services/mockData';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -84,6 +84,11 @@ const SettingsView: React.FC = () => {
     }
     
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleLogout = async () => {
+    await fetch('/.netlify/functions/auth-logout', { method: 'POST' });
+    window.location.reload();
   };
 
   const handleBackfillInvoices = async () => {
@@ -319,6 +324,14 @@ const SettingsView: React.FC = () => {
                    <p className="text-xs text-gray-500 text-center px-2">
                        Scans all appointments and creates invoices for any that are missing.
                    </p>
+                   <div className="border-t border-gray-100 pt-4 mt-2">
+                       <button
+                           onClick={handleLogout}
+                           className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                       >
+                           <LogOut size={16} /> Sign Out
+                       </button>
+                   </div>
                </div>
            </div>
         </div>
