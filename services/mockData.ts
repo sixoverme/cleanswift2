@@ -509,7 +509,7 @@ class GoogleSheetsService implements IDataService {
                 });
                 
                 // Seed Header
-                const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "Avatar (Base64)", "JobTypes (JSON)"];
+                const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "JobTypes (JSON)", "ChecklistTemplates (JSON)", "Avatar (Base64...Chunks)"];
                 await this.writeSheet(SHEETS.SETTINGS, [settingsHeader]);
             }
 
@@ -562,11 +562,11 @@ class GoogleSheetsService implements IDataService {
         // The first item in the array acts as the structure definer.
         
         // Actually, let's add explicit headers for clarity in the sheet
-        const clientHeader = ["ID", "Name", "House Notes", "General Notes", "Contacts (JSON)", "Locations (JSON)", "Children (JSON)", "Pets (JSON)"];
+        const clientHeader = ["ID", "Name", "House Notes", "General Notes", "Contacts (JSON)", "Locations (JSON)", "Children (JSON)", "Pets (JSON)", "Checklist (JSON)"];
         const apptHeader = ["ID", "ClientID", "Client Name", "Date", "Time", "Service", "Status", "Address", "Rate", "Hours", "Notes", "Frequency", "SeriesID", "Checklist (JSON)", "JobLog (JSON)"];
         const invHeader = ["ID", "ClientID", "ApptID", "Client Name", "Issue Date", "Due Date", "Status", "Amount", "Notes", "Items (JSON)"];
         const invenHeader = ["ID", "Item Name", "Quantity", "Unit", "Min Threshold", "Status", "Supplier", "Cost", "Notes"];
-        const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "Avatar (Base64)", "JobTypes (JSON)"];
+        const settingsHeader = ["CompanyName", "CompanyAddress", "ShowLogo", "JobTypes (JSON)", "ChecklistTemplates (JSON)", "Avatar (Base64...Chunks)"];
 
         await this.writeSheet(SHEETS.CLIENTS, [clientHeader, ...INITIAL_CLIENTS.map(this.serializeClient)]);
         await this.writeSheet(SHEETS.APPOINTMENTS, [apptHeader, ...INITIAL_APPOINTMENTS.map(this.serializeAppointment)]);
@@ -578,13 +578,15 @@ class GoogleSheetsService implements IDataService {
     // --- Serialization Helpers ---
     
     private serializeClient = (c: Client) => [
-        c.id, c.name, c.houseNotes, c.generalNotes, 
-        JSON.stringify(c.contacts), JSON.stringify(c.locations), JSON.stringify(c.children), JSON.stringify(c.pets)
+        c.id, c.name, c.houseNotes, c.generalNotes,
+        JSON.stringify(c.contacts), JSON.stringify(c.locations), JSON.stringify(c.children), JSON.stringify(c.pets),
+        JSON.stringify(c.checklist || [])
     ];
     private deserializeClient = (row: any[]): Client => ({
         id: row[0], name: row[1], houseNotes: row[2], generalNotes: row[3],
         contacts: JSON.parse(row[4] || '[]'), locations: JSON.parse(row[5] || '[]'),
-        children: JSON.parse(row[6] || '[]'), pets: JSON.parse(row[7] || '[]')
+        children: JSON.parse(row[6] || '[]'), pets: JSON.parse(row[7] || '[]'),
+        checklist: JSON.parse(row[8] || '[]')
     });
 
     private serializeAppointment = (a: Appointment) => [
@@ -618,37 +620,48 @@ class GoogleSheetsService implements IDataService {
 
     private serializeSettings = (s: UserProfile) => {
         const jobTypesStr = JSON.stringify(s.jobTypes);
+        const checklistStr = JSON.stringify(s.checklistTemplates || []);
         const avatar = s.avatar || "";
         const chunkSize = 40000; // Safe limit below 50k
         const avatarChunks = [];
         for (let i = 0; i < avatar.length; i += chunkSize) {
             avatarChunks.push(avatar.slice(i, i + chunkSize));
         }
-        
+
         return [
-            s.companyName, 
-            s.companyAddress, 
-            s.showLogoOnInvoice ? "TRUE" : "FALSE", 
-            jobTypesStr, 
+            s.companyName,
+            s.companyAddress,
+            s.showLogoOnInvoice ? "TRUE" : "FALSE",
+            jobTypesStr,
+            checklistStr,
             ...avatarChunks
         ];
     };
-    
+
     private deserializeSettings = (row: any[]): UserProfile => {
         let jobTypes = [];
+        let checklistTemplates = [];
         let avatar = "";
-        
-        // Heuristic to support both old and new schema during transition
-        // New Schema: [Name, Addr, Logo, JobTypes, AvatarChunk1, AvatarChunk2...]
-        // Old Schema: [Name, Addr, Logo, Avatar, JobTypes]
-        
+
+        // Schema evolution (detected by column types):
+        // v3 Schema: [Name, Addr, Logo, JobTypes(JSON), ChecklistTemplates(JSON), AvatarChunks...]
+        // v2 Schema: [Name, Addr, Logo, JobTypes(JSON), AvatarChunks...]
+        // v1 Schema: [Name, Addr, Logo, Avatar, JobTypes(JSON)]
+
         const col3 = row[3] || "";
+        const col4 = row[4] || "";
         if (col3.trim().startsWith('[')) {
-            // It's likely JSON, so it's the New Schema
             try { jobTypes = JSON.parse(col3); } catch(e) {}
-            avatar = row.slice(4).join('');
+            // col4 starts with '[' means it's a JSON array = checklistTemplates (v3)
+            // col4 starts with 'data:' or is empty means it's avatar data (v2)
+            if (col4.trim().startsWith('[')) {
+                try { checklistTemplates = JSON.parse(col4); } catch(e) {}
+                avatar = row.slice(5).join('');
+            } else {
+                avatar = row.slice(4).join('');
+            }
         } else {
-            // Fallback / Old Schema
+            // v1: Avatar in col3, JobTypes in col4
             avatar = col3;
             if (row[4]) {
                 try { jobTypes = JSON.parse(row[4]); } catch(e) {}
@@ -660,7 +673,8 @@ class GoogleSheetsService implements IDataService {
             companyAddress: row[1],
             showLogoOnInvoice: row[2] === "TRUE",
             avatar: avatar,
-            jobTypes: jobTypes
+            jobTypes: jobTypes,
+            checklistTemplates: checklistTemplates
         };
     };
 
@@ -894,10 +908,7 @@ class GoogleSheetsService implements IDataService {
     }
 
     async saveSettings(s: UserProfile) {
-        // We overwrite the entire sheet (preserving header)
-        // Header matching new schema:
-        const header = ["CompanyName", "CompanyAddress", "ShowLogo", "JobTypes (JSON)", "Avatar (Base64...Chunks)"];
-        
+        const header = ["CompanyName", "CompanyAddress", "ShowLogo", "JobTypes (JSON)", "ChecklistTemplates (JSON)", "Avatar (Base64...Chunks)"];
         await this.writeSheet(SHEETS.SETTINGS, [header, this.serializeSettings(s)]);
     }
 }

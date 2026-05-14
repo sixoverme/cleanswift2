@@ -422,7 +422,9 @@ const AppointmentsView: React.FC<{initialAppointmentId?: string | null, onClearI
           item.id === itemId ? { ...item, completed: !item.completed } : item
       );
 
-      setSelectedAppt({ ...selectedAppt, checklist: updatedChecklist });
+      const updatedAppt = { ...selectedAppt, checklist: updatedChecklist };
+      setSelectedAppt(updatedAppt);
+      db.updateAppointment(updatedAppt);
   };
 
   const handleEdit = (appt: Appointment) => {
